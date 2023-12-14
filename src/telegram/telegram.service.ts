@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
-//import TelegramBot from 'node-telegram-bot-api';
+import { PicoyplacaService } from 'src/picoyplaca/picoyplaca.service';
 
 @Injectable()
 export class TelegramService {
@@ -13,7 +13,7 @@ export class TelegramService {
     },
   };
 
-  constructor() {
+  constructor(private readonly picoyplacaService: PicoyplacaService) {
     this.token = process.env.TELEGRAM_TOKEN;
     this.bot = new TelegramBot(this.token, { polling: true });
 
@@ -61,7 +61,8 @@ export class TelegramService {
 
   private async picoYPlacaListeners() {
     this.bot.onText(/\/pico/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'You pressed pico');
+      const message = await this.picoyplacaService.getPicoyplacaInfo();
+      await this.bot.sendMessage(msg.chat.id, message);
     });
   }
 }
