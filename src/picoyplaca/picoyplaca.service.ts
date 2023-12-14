@@ -18,7 +18,7 @@ export class PicoyplacaService {
     return responseMessage;
   }
 
-  getEmojiNumber(number: number): string {
+  private getEmojiNumber(number: number): string {
     const numbersEmojis = [
       '0️⃣',
       '1️⃣',
@@ -39,7 +39,7 @@ export class PicoyplacaService {
     }
   }
 
-  getPyPMessage(pYpNumbers: number[]): string {
+  private getPyPMessage(pYpNumbers: number[]): string {
     const emojisNumPicoYPlaca = pYpNumbers.map(this.getEmojiNumber);
 
     return pYpNumbers.length === 0
