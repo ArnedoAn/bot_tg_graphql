@@ -1,24 +1,49 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import * as cheerio from 'cheerio';
 
 @Injectable()
 export class PicoyplacaService {
   constructor(private readonly httpService: HttpService) {}
 
   async getPicoyplacaInfo(): Promise<string> {
-    const url: string =
-      'https://www.pyphoy.com/_next/data/x4EcV0xhXDbd6AZNc4I42/cartagena.json?city=cartagena';
+    try {
+      // const url: string =
+      //   'https://www.pyphoy.com/_next/data/x4EcV0xhXDbd6AZNc4I42/cartagena.json?city=cartagena';
 
-    const response: any = await this.httpService.get(url).toPromise();
-    const data = response.data;
-    const numbers = data.pageProps.categories[0].data[0].numbers;
+      // const response: any = await this.httpService.get(url).toPromise();
+      // const data = response.data;
+      // const numbers = data.pageProps.categories[0].data[0].numbers;
 
-    const responseMessage = this.getPyPMessage(numbers);
+      const numbers = await this.getScrapedPicoyplacaInfo();
 
-    return responseMessage;
+      const responseMessage = this.getPyPMessage(numbers);
+
+      return responseMessage;
+    } catch (e) {
+      console.log(e.message);
+      await this.getScrapedPicoyplacaInfo();
+      return 'Error al obtener información de Pico y Placa';
+    }
   }
 
-  private getEmojiNumber(number: number): string {
+  private async getScrapedPicoyplacaInfo(): Promise<Number[]> {
+    try {
+      const url: string = 'https://www.pyphoy.com/cartagena/particulares';
+      const response = await this.httpService.get(url).toPromise();
+      const $ = cheerio.load(response.data);
+      const numbersText = $(
+        '.sc-4e15c505-0.juuwzm.sc-9e56e907-2.jGMtpa',
+      ).text();
+      const numbers = numbersText.split('-').map((num) => parseInt(num));
+      return numbers;
+    } catch (e) {
+      console.log(e);
+      return [];
+    }
+  }
+
+  private getEmojiNumber(num: number): string {
     const numbersEmojis = [
       '0️⃣',
       '1️⃣',
@@ -32,20 +57,18 @@ export class PicoyplacaService {
       '9️⃣',
     ];
 
-    if (number >= 0 && number <= 9) {
-      return numbersEmojis[number];
+    if (num >= 0 && num <= 9) {
+      return numbersEmojis[num];
     } else {
       return '❓'; // Emoji de pregunta si el número no está en el rango esperado
     }
   }
 
-  private getPyPMessage(pYpNumbers: number[]): string {
+  private getPyPMessage(pYpNumbers: Number[]): string {
     const emojisNumPicoYPlaca = pYpNumbers.map(this.getEmojiNumber);
 
     return pYpNumbers.length === 0
-      ? '¡Hoy sin Pico y Placa! 🚗✨'
-      : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(
-          ', ',
-        )} hoy. ¡Planifica tu ruta! 🚗🚦`;
+      ? '¡Hoy sin Pico y Placa! 🚗'
+      : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(', ')} hoy.`;
   }
 }

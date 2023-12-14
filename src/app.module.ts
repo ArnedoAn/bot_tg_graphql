@@ -5,6 +5,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { ConfigModule } from '@nestjs/config';
 import { TranscaribeModule } from './transcaribe/transcaribe.module';
 import { PicoyplacaModule } from './picoyplaca/picoyplaca.module';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { PicoyplacaModule } from './picoyplaca/picoyplaca.module';
     }),
     TranscaribeModule,
     PicoyplacaModule,
+    SharedModule,
   ],
   controllers: [AppController],
   providers: [AppService],

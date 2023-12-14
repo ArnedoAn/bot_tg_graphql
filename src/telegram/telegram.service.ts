@@ -1,22 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
-import { PicoyplacaService } from 'src/picoyplaca/picoyplaca.service';
+import { BotInstance } from 'src/shared/instances/bot.instance';
+import { PicoyplacaHandler } from 'src/picoyplaca/handlers/picoyplaca.handler';
 
 @Injectable()
 export class TelegramService {
-  private readonly bot: any;
-  private readonly token: string;
-  private readonly options = {
-    reply_markup: {
-      keyboard: [[{ text: '+' }, { text: '-' }]],
-      resize_keyboard: true,
-    },
-  };
+  private readonly bot: TelegramBot;
 
-  constructor(private readonly picoyplacaService: PicoyplacaService) {
-    this.token = process.env.TELEGRAM_TOKEN;
-    this.bot = new TelegramBot(this.token, { polling: true });
-
+  constructor(
+    private readonly botInstance: BotInstance,
+    private readonly picoyplacaHandler: PicoyplacaHandler,
+  ) {
+    this.bot = this.botInstance.getBot();
     this.setupListeners();
   }
 
@@ -61,8 +56,7 @@ export class TelegramService {
 
   private async picoYPlacaListeners() {
     this.bot.onText(/\/pico/, async (msg: TelegramBot.Message) => {
-      const message = await this.picoyplacaService.getPicoyplacaInfo();
-      await this.bot.sendMessage(msg.chat.id, message);
+      await this.picoyplacaHandler.picoHandler(msg);
     });
   }
 }
