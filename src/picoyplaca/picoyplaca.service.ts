@@ -27,7 +27,7 @@ export class PicoyplacaService {
     }
   }
 
-  private async getScrapedPicoyplacaInfo(): Promise<Number[]> {
+  private async getScrapedPicoyplacaInfo(): Promise<number[]> {
     try {
       const url: string = 'https://www.pyphoy.com/cartagena/particulares';
       const response = await this.httpService.get(url).toPromise();
@@ -64,7 +64,7 @@ export class PicoyplacaService {
     }
   }
 
-  private getPyPMessage(pYpNumbers: Number[]): string {
+  private getPyPMessage(pYpNumbers: number[]): string {
     const emojisNumPicoYPlaca = pYpNumbers.map(this.getEmojiNumber);
 
     return pYpNumbers.length === 0

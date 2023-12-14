@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { BotInstance } from './instances/bot.instance';
-import { PrismaService } from './services/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  providers: [BotInstance, PrismaService],
-  exports: [BotInstance, PrismaService],
+  providers: [BotInstance],
+  exports: [BotInstance],
+  imports: [PrismaModule],
 })
 export class SharedModule {}
