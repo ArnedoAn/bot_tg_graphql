@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common';
 export class TarjetaService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createTajerta(card: Tarjeta) {
+  async createTarjeta(card: Tarjeta) {
     try {
       const result = await this.prisma.tarjeta.create({
         data: card,
@@ -20,6 +20,7 @@ export class TarjetaService {
   async getAllTarjetas() {
     try {
       const result = await this.prisma.tarjeta.findMany();
+      if (!result) throw new Error('No hay tarjetas registradas');
       return { success: true, result };
     } catch (err) {
       return { success: false, result: err.message };
@@ -28,9 +29,10 @@ export class TarjetaService {
 
   async getTarjetaWhere(data: any) {
     try {
-      const result = await this.prisma.tarjeta.findMany({
+      const result = await this.prisma.tarjeta.findUnique({
         where: data,
       });
+      if (!result) throw new Error('Tarjeta no encontrada');
       return { success: true, result };
     } catch (err) {
       return { success: false, result: err.message };
@@ -42,6 +44,7 @@ export class TarjetaService {
       const result = await this.prisma.tarjeta.findMany({
         where: data,
       });
+      if (!result) throw new Error('Tarjetas no encontradas');
       return { success: true, result };
     } catch (err) {
       return { success: false, result: err.message };

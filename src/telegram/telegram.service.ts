@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
 import { BotInstance } from 'src/shared/instances/bot.instance';
 import { PicoyplacaHandler } from 'src/picoyplaca/handlers/picoyplaca.handler';
+import { TranscaribeHandler } from 'src/transcaribe/handlers/transcaribe.handler';
 
 @Injectable()
 export class TelegramService {
@@ -10,6 +11,7 @@ export class TelegramService {
   constructor(
     private readonly botInstance: BotInstance,
     private readonly picoyplacaHandler: PicoyplacaHandler,
+    private readonly transcaribeHandler: TranscaribeHandler,
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
@@ -25,16 +27,20 @@ export class TelegramService {
   }
 
   private async transcaribeListeners() {
+    this.bot.onText(/\/init/, async (msg: TelegramBot.Message) => {
+      await this.transcaribeHandler.initHandler(msg);
+    });
+
     this.bot.onText(/\+/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'You pressed +');
+      await this.transcaribeHandler.addMoneyToCardHandler(msg);
     });
 
     this.bot.onText(/\-/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'You pressed -');
+      await this.transcaribeHandler.subtractMoneyFromCardHandler(msg);
     });
 
     this.bot.onText(/\/saldo/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Your saldo is 0');
+      await this.transcaribeHandler.getCardBalanceHandler(msg);
     });
 
     this.bot.onText(/\/actualizar/, async (msg: TelegramBot.Message) => {
