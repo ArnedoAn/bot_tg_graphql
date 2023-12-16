@@ -14,7 +14,11 @@ export class PicoyplacaHandler {
   }
 
   async picoHandler(msg: TelegramBot.Message) {
-    const message = await this.pypService.getPicoyplacaInfo();
-    await this.bot.sendMessage(msg.chat.id, message);
+    try {
+      const message = await this.pypService.getPicoyplacaInfo();
+      await this.bot.sendMessage(msg.chat.id, message);
+    } catch (err) {
+      await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+    }
   }
 }

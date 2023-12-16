@@ -31,11 +31,11 @@ export class TelegramService {
       await this.transcaribeHandler.initHandler(msg);
     });
 
-    this.bot.onText(/\+/, async (msg: TelegramBot.Message) => {
+    this.bot.onText(/^\+$/, async (msg: TelegramBot.Message) => {
       await this.transcaribeHandler.addMoneyToCardHandler(msg);
     });
 
-    this.bot.onText(/\-/, async (msg: TelegramBot.Message) => {
+    this.bot.onText(/^\-$/, async (msg: TelegramBot.Message) => {
       await this.transcaribeHandler.subtractMoneyFromCardHandler(msg);
     });
 
@@ -44,19 +44,19 @@ export class TelegramService {
     });
 
     this.bot.onText(/\/actualizar/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Updating saldo...');
+      await this.transcaribeHandler.setBalanceHandler(msg);
     });
 
     this.bot.onText(/\/borrarhistorial/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Deleting history...');
+      await this.transcaribeHandler.deleteCardHistoryHandler(msg);
     });
 
     this.bot.onText(/\/borrartarjeta/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Your history is empty');
+      await this.transcaribeHandler.deleteCardHandler(msg);
     });
 
     this.bot.onText(/\/historial/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Your history is empty');
+      await this.transcaribeHandler.getCardHistoryHandler(msg);
     });
   }
 

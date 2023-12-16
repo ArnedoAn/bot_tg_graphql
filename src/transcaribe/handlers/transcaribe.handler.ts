@@ -26,6 +26,15 @@ export class TranscaribeHandler {
         `Tu saldo es: $${balance} \n${Math.trunc(
           balance / this.TARIFA,
         )} pasajes disponibles.`,
+      setBalance: {
+        first: `Ingresa el nuevo saldo de tu tarjeta ($COP):`,
+        second: (balance: number) =>
+          `Saldo actualizado con éxito.\n` +
+          this.responseMessages.GOOD.cardBalance(balance),
+      },
+      deleteCardHistory: `Historial borrado con éxito.`,
+      deleteCard: `Tarjeta borrada con éxito.`,
+      cardHistory: (history: any) => history.map(this.formatTransaction),
     },
     BAD: {
       init: {
@@ -46,6 +55,27 @@ export class TranscaribeHandler {
   ) {
     this.bot = this.botInstace.getBot();
     this.TARIFA = CONSTANTS.tarifa;
+  }
+
+  private formatTransaction(transaction: any): string {
+    const formattedDate = new Date(transaction.fecha).toLocaleString('es-CO', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      timeZoneName: 'short',
+    });
+
+    const amountColor = transaction.monto >= 0 ? '🟢' : '🔴'; // Puedes cambiar por emojis
+    const formattedAmount = new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+    }).format(transaction.monto);
+
+    return `${formattedDate}\n${amountColor} ${formattedAmount}`;
   }
 
   private async verifyUser(chatId: string) {
@@ -87,9 +117,28 @@ export class TranscaribeHandler {
   }
 
   private async verifyAmountHandler(amount: number) {
-    if (amount < 0 || amount / this.TARIFA < 1) {
+    if (amount < 0 || amount / this.TARIFA < 0) {
       throw new Error(this.responseMessages.BAD.init.second(amount));
     }
+  }
+
+  private async sendMessageToUser(
+    chatId: number,
+    message: string,
+    options: TelegramBot.SendMessageOptions = null,
+  ): Promise<TelegramBot.Message> {
+    return await this.bot.sendMessage(chatId, message, options);
+  }
+
+  private async getNumberOnReplyMessageResponse(
+    chatId: number,
+    message_id: number,
+  ): Promise<number> {
+    return new Promise((resolve) => {
+      this.bot.onReplyToMessage(chatId, message_id, (msgToReply) => {
+        resolve(parseInt(msgToReply.text || '0'));
+      });
+    });
   }
 
   async initHandler(msg: TelegramBot.Message) {
@@ -97,7 +146,7 @@ export class TranscaribeHandler {
       if (await this.verifyUser(msg.chat.id.toString()))
         throw new Error(this.responseMessages.BAD.init.first);
 
-      const count = await this.bot.sendMessage(
+      const count = await this.sendMessageToUser(
         msg.chat.id,
         this.responseMessages.GOOD.init.first,
         {
@@ -107,27 +156,26 @@ export class TranscaribeHandler {
         },
       );
 
-      this.bot.onReplyToMessage(
+      const newCardBalance = await this.getNumberOnReplyMessageResponse(
         msg.chat.id,
         count.message_id,
-        async (msgToReply) => {
-          const newCardBalance = parseInt(msgToReply.text || '0');
-          await this.verifyAmountHandler(newCardBalance);
-          const cardCreated = await this.transcaribeService.newUserCard(
-            msg.chat.id.toString(),
-            newCardBalance,
-          );
-          if (!cardCreated.success) throw new Error(cardCreated.result);
-          this.bot.sendMessage(
-            msg.chat.id,
-            this.responseMessages.GOOD.init.second,
-          );
-        },
+      );
+
+      await this.verifyAmountHandler(newCardBalance);
+
+      const cardCreated = await this.transcaribeService.newUserCard(
+        msg.chat.id.toString(),
+        newCardBalance,
+      );
+      if (!cardCreated.success) throw new Error(cardCreated.result);
+      await this.bot.sendMessage(
+        msg.chat.id,
+        this.responseMessages.GOOD.init.second,
       );
     } catch (err) {
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
-        err.message ? err.message : this.errorMessage,
+        err.message.replace('Error:', '') || this.errorMessage,
         this.options,
       );
       return;
@@ -146,16 +194,16 @@ export class TranscaribeHandler {
         count,
         msg.chat.id.toString(),
       );
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
         this.responseMessages.GOOD.addOrSubstract(result.result),
         this.options,
       );
       return;
     } catch (err) {
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
-        err.message || this.responseMessages.BAD.add,
+        err.message.replace('Error:', '') || this.responseMessages.BAD.add,
         this.options,
       );
       return;
@@ -178,16 +226,16 @@ export class TranscaribeHandler {
         count,
         msg.chat.id.toString(),
       );
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
         this.responseMessages.GOOD.addOrSubstract(result.result),
         this.options,
       );
       return;
     } catch (err) {
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
-        err.message || this.responseMessages.BAD.subtract,
+        err.message.replace('Error:', '') || this.responseMessages.BAD.subtract,
         this.options,
       );
       return;
@@ -202,24 +250,120 @@ export class TranscaribeHandler {
       );
       if (!getCardBalance)
         throw new Error(this.responseMessages.BAD.cardBalance);
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
         this.responseMessages.GOOD.cardBalance(getCardBalance.saldoDisponible),
         this.options,
       );
     } catch (err) {
-      this.bot.sendMessage(
+      await this.sendMessageToUser(
         msg.chat.id,
-        err.message || this.responseMessages.BAD.cardBalance,
+        err.message.replace('Error:', '') ||
+          this.responseMessages.BAD.cardBalance,
         this.options,
       );
       return;
     }
   }
 
-  async setBalanceHandler(msg: TelegramBot.Message) {}
-  async deleteCardHistoryHandler(msg: TelegramBot.Message) {}
-  async deleteCardHandler(msg: TelegramBot.Message) {}
-  async getCardHistoryHandler(msg: TelegramBot.Message) {}
-  async newCardHandler(msg: TelegramBot.Message) {}
+  async setBalanceHandler(msg: TelegramBot.Message) {
+    try {
+      await this.verifyUserHandler(msg);
+      const setCount = await this.sendMessageToUser(
+        msg.chat.id,
+        this.responseMessages.GOOD.setBalance.first,
+        {
+          reply_markup: {
+            force_reply: true,
+          },
+        },
+      );
+      const newCardBalance: number = await this.getNumberOnReplyMessageResponse(
+        msg.chat.id,
+        setCount.message_id,
+      );
+      await this.verifyAmountHandler(newCardBalance);
+      const balanceSeted = await this.transcaribeService.setBalance(
+        msg.chat.id.toString(),
+        newCardBalance,
+      );
+      if (!balanceSeted.success) throw new Error(balanceSeted.result);
+      await this.sendMessageToUser(
+        msg.chat.id,
+        this.responseMessages.GOOD.setBalance.second(newCardBalance),
+        this.options,
+      );
+    } catch (err) {
+      await this.sendMessageToUser(
+        msg.chat.id,
+        err.message.replace('Error:', '') || this.errorMessage,
+        this.options,
+      );
+      return;
+    }
+  }
+
+  async deleteCardHistoryHandler(msg: TelegramBot.Message) {
+    try {
+      await this.verifyUserHandler(msg);
+      const result = await this.transcaribeService.deleteCardHistory(
+        msg.chat.id.toString(),
+      );
+      if (!result.success) throw new Error(result.result);
+      await this.sendMessageToUser(
+        msg.chat.id,
+        this.responseMessages.GOOD.deleteCardHistory,
+        this.options,
+      );
+    } catch (err) {
+      await this.sendMessageToUser(
+        msg.chat.id,
+        err.message.replace('Error:', '') || this.errorMessage,
+        this.options,
+      );
+      return;
+    }
+  }
+
+  async deleteCardHandler(msg: TelegramBot.Message) {
+    try {
+      await this.verifyUserHandler(msg);
+      const result = await this.transcaribeService.deleteCard(
+        msg.chat.id.toString(),
+      );
+      if (!result.success) throw new Error(result.result);
+      await this.sendMessageToUser(
+        msg.chat.id,
+        this.responseMessages.GOOD.deleteCard,
+        this.options,
+      );
+    } catch (err) {
+      await this.sendMessageToUser(
+        msg.chat.id,
+        err.message.replace('Error:', '') || this.errorMessage,
+        this.options,
+      );
+      return;
+    }
+  }
+
+  async getCardHistoryHandler(msg: TelegramBot.Message) {
+    try {
+      await this.verifyUserHandler(msg);
+      const result = await this.transcaribeService.getCardHistory(
+        msg.chat.id.toString(),
+      );
+      if (!result.success) throw new Error(result.result);
+      const history = this.responseMessages.GOOD.cardHistory(result.result);
+      const historyMessage = history.join('\n\n');
+      await this.sendMessageToUser(msg.chat.id, historyMessage, this.options);
+    } catch (err) {
+      await this.sendMessageToUser(
+        msg.chat.id,
+        err.message.replace('Error:', '') || this.errorMessage,
+        this.options,
+      );
+      return;
+    }
+  }
 }
