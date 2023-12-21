@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { BotInstance } from 'src/shared/instances/bot.instance';
 import { PicoyplacaHandler } from 'src/picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from 'src/transcaribe/handlers/transcaribe.handler';
+import { Console } from 'console';
 
 @Injectable()
 export class TelegramService {
@@ -31,32 +32,16 @@ export class TelegramService {
       await this.transcaribeHandler.initHandler(msg);
     });
 
-    this.bot.onText(/^\+$/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.addMoneyToCardHandler(msg);
-    });
-
-    this.bot.onText(/^\-$/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.subtractMoneyFromCardHandler(msg);
+    this.bot.onText(/\/info/, async (msg: TelegramBot.Message) => {
+      await this.transcaribeHandler.getInfoHandler(msg);
     });
 
     this.bot.onText(/\/saldo/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.getCardBalanceHandler(msg);
-    });
-
-    this.bot.onText(/\/actualizar/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.setBalanceHandler(msg);
-    });
-
-    this.bot.onText(/\/borrarhistorial/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.deleteCardHistoryHandler(msg);
-    });
-
-    this.bot.onText(/\/borrartarjeta/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.deleteCardHandler(msg);
+      await this.transcaribeHandler.balanceHandler(msg);
     });
 
     this.bot.onText(/\/historial/, async (msg: TelegramBot.Message) => {
-      await this.transcaribeHandler.getCardHistoryHandler(msg);
+      await this.transcaribeHandler.cardHistoryHandler(msg);
     });
   }
 

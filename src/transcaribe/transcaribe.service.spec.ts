@@ -13,7 +13,6 @@ describe('TranscaribeService', () => {
     }).compile();
 
     service = module.get<TranscaribeService>(TranscaribeService);
-    
   });
 
   it('should be defined', () => {

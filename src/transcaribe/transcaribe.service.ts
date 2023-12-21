@@ -1,122 +1,139 @@
 import { Injectable } from '@nestjs/common';
 import { TarjetaService } from 'src/shared/prisma/tarjeta.service';
-import { HistorialService } from 'src/shared/prisma/historial.service';
-import {
-  CONSTANTS as Const,
-  setUTCDate as dateFormat,
-} from './helpers/operations.helper';
-import { Tarjeta } from '@prisma/client';
+import { CONSTANTS as Const } from './helpers/operations.helper';
 import { Result } from 'src/shared/interfaces/result.interface';
+import { HttpService } from '@nestjs/axios';
+import { CardData, Transaction } from './interfaces/api.interfaces';
+import { ApiRequest } from './interfaces/apiCall.interface';
 
 @Injectable()
 export class TranscaribeService {
   private readonly TARIFA: number;
   constructor(
     private readonly tarjetaService: TarjetaService,
-    private readonly historialService: HistorialService,
+    private readonly httpService: HttpService,
   ) {
     this.TARIFA = Const.tarifa;
   }
 
-  // Add or subtract money from card
-  async cardOperation(count: number, id: string): Promise<Result> {
+  private convertNumbersToEmojis(number: number): string {
+    const numberEmojis = [
+      '0️⃣',
+      '1️⃣',
+      '2️⃣',
+      '3️⃣',
+      '4️⃣',
+      '5️⃣',
+      '6️⃣',
+      '7️⃣',
+      '8️⃣',
+      '9️⃣',
+    ];
+    return number
+      .toString()
+      .split('')
+      .map((digit) => numberEmojis[parseInt(digit, 10)])
+      .join('');
+  }
+
+  private createBalanceMessage(balance: string): string {
+    const balanceEmojis = this.convertNumbersToEmojis(parseInt(balance, 10));
+    return `🌟 Saldo actual: $${balanceEmojis} 💰 ¡Listo para seguir viajando! 🚌`;
+  }
+
+  async userExists(chatId: string): Promise<boolean> {
     try {
-      const total = count * this.TARIFA;
-      const cardBalance = await this.getCardBalance(id);
-      if (!cardBalance) throw new Error('Tarjeta no encontrada');
-      const currentBalance = cardBalance.saldoDisponible + total;
-      const result = await this.tarjetaService.updateTarjeta(id, {
-        saldoDisponible: currentBalance,
-      });
-      const truncBalance = Math.trunc(
-        result.result.saldoDisponible / this.TARIFA,
-      );
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: truncBalance };
-    } catch (err) {
-      return { success: false, result: err };
+      const result = await this.tarjetaService.getTarjetaWhere({ id: chatId });
+      if (!result.success) throw new Error('Tarjeta no encontrada');
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
     }
   }
 
-  async newUserCard(id: string, balance: number = 0): Promise<Result> {
+  async getBalance(id: string): Promise<Result> {
+    try {
+      const apiData = await this.getCardInfo(id);
+      if (!apiData) throw new Error('Tarjeta no encontrada');
+      const message = this.createBalanceMessage(apiData.saldo);
+      return { success: true, result: message };
+    } catch (e) {
+      console.error(e);
+      return { success: false, result: e.message };
+    }
+  }
+
+  private generateTransactionMessages(transaction: Transaction): string {
+    const isAbono = transaction.MONTO_ABONO > 0;
+    const action = isAbono ? '💰 Agregado' : '💸 Gastado';
+    const amount = isAbono
+      ? transaction.MONTO_ABONO
+      : transaction.MONTO_DESCUENTO;
+
+    return `
+    📅 Fecha: ${transaction.fecha_trx}
+    🚉 Estación: ${transaction.estacion}
+    💳 Tipo de Transacción: ${transaction.nombreTRX}
+    ${action}: ${amount}`;
+  }
+
+  async getHistory(id: string): Promise<Result> {
+    try {
+      const apiData = await this.getCardInfo(id);
+      if (!apiData) throw new Error('Tarjeta no encontrada');
+      const messages = apiData.listaTransacciones.map((transaction) =>
+        this.generateTransactionMessages(transaction),
+      );
+      return { success: true, result: messages };
+    } catch (e) {
+      console.error(e);
+      return { success: false, result: e.message };
+    }
+  }
+
+  async createCard(
+    id: string,
+    cardId: string,
+    apiKey: string,
+  ): Promise<Result> {
     try {
       const result = await this.tarjetaService.createTarjeta({
         id,
-        saldoDisponible: balance,
+        cardId,
+        apiCardId: apiKey,
       });
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
+      if (!result) throw new Error('Tarjeta no encontrada');
+      return { success: true, result };
+    } catch (e) {
+      console.error(e);
+      return { success: false, result: e.message };
     }
   }
 
-  async setBalance(id: string, balance: number): Promise<Result> {
+  async getCardInfo(id: string): Promise<CardData> {
     try {
-      const result = await this.tarjetaService.updateTarjeta(id, {
-        saldoDisponible: balance,
-      });
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
+      const result = await this.getCardApiInfo(id);
+      if (!result) throw new Error('Tarjeta no encontrada');
+      const url =
+        'http://recaudo.sondapay.com/recaudowsrest/producto/consultaTrx';
+      const data = result;
+      data.numeroDias = 10;
+      const apiResponse = await this.httpService.post(url, data).toPromise();
+      return apiResponse.data;
+    } catch (e) {
+      console.error(e);
+      return null;
     }
   }
 
-  async deleteCard(id: string): Promise<Result> {
+  private async getCardApiInfo(id: string): Promise<ApiRequest> {
     try {
-      const result = await this.tarjetaService.deleteTarjeta(id);
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
-    }
-  }
-
-  async registerCardOperation(count: number, id: string): Promise<Result> {
-    try {
-      const result = await this.historialService.createHistorial({
-        tarjetaId: id,
-        fecha: dateFormat(new Date()),
-        monto: count * this.TARIFA,
-      });
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
-    }
-  }
-
-  async getCardHistory(id: string): Promise<Result> {
-    try {
-      const result = await this.historialService.getHistorialWhere({
-        tarjetaId: id,
-      });
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
-    }
-  }
-
-  async deleteCardHistory(id: string): Promise<Result> {
-    try {
-      const result = await this.historialService.deleteHistorialWhere({
-        tarjetaId: id,
-      });
-      if (!result.success) throw new Error(result.result);
-      return { success: true, result: result.result };
-    } catch (err) {
-      return { success: false, result: err };
-    }
-  }
-
-  async getCardBalance(id: string): Promise<Tarjeta> {
-    try {
-      const result = await this.tarjetaService.getTarjetaWhere({ id });
-      if (!result.success) throw new Error(result.result);
+      const result = await this.tarjetaService.getInfoTarjetaFromApi(id);
+      if (!result.success) throw new Error('Tarjeta no encontrada');
       return result.result;
-    } catch (err) {
+    } catch (e) {
+      console.warn(e);
       return null;
     }
   }
