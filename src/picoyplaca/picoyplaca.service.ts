@@ -67,7 +67,7 @@ export class PicoyplacaService {
   private getPyPMessage(pYpNumbers: number[]): string {
     const emojisNumPicoYPlaca = pYpNumbers.map(this.getEmojiNumber);
 
-    return pYpNumbers.length === 0
+    return pYpNumbers.length === 0 || [NaN]
       ? '¡Hoy sin Pico y Placa! 🚗'
       : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(', ')} hoy.`;
   }
