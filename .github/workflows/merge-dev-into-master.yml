@@ -1,17 +1,23 @@
-name: Merge dev to master
+name: Merge dev to main
 
 on:
   push:
     branches:
-      - 'dev'
+      - dev
+
 jobs:
-  merge-branch:
+  merge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: everlytic/branch-merge@1.1.2
+      - name: Checkout main
+        uses: actions/checkout@v2
         with:
-          github_token: ${{ github.token }}
-          source_ref: ${{ github.ref }}
-          target_branch: 'main'
-          commit_message_template: '[Automated] Merged {source_ref} into target {target_branch}'
+          ref: main
+
+      - name: Merge dev
+        run: |
+          git merge dev
+
+      - name: Push
+        run: |
+          git push
