@@ -7,7 +7,6 @@ import { TranscaribeModule } from './transcaribe/transcaribe.module';
 import { PicoyplacaModule } from './picoyplaca/picoyplaca.module';
 import { SharedModule } from './shared/shared.module';
 import { RemindersModule } from './reminders/reminders.module';
-import { RemindersService } from './reminders/reminders.service';
 
 @Module({
   imports: [
@@ -21,6 +20,6 @@ import { RemindersService } from './reminders/reminders.service';
     RemindersModule,
   ],
   controllers: [AppController],
-  providers: [AppService, RemindersService],
+  providers: [AppService],
 })
 export class AppModule {}
