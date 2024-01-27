@@ -3,7 +3,7 @@ name: Deploy
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   deploy:
@@ -26,6 +26,9 @@ jobs:
 
       - name: Install Yarn
         run: npm install -g yarn
+
+      - name: Install Nest CLI
+        run: yarn global add @nestjs/cli
 
       - name: Install dependencies
         run: yarn install
