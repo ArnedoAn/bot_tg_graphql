@@ -1,11 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { TarjetaService } from 'src/shared/prisma/tarjeta.service';
 import {
   CONSTANTS as Const,
   setUTCDate as dateFormat,
 } from '../helpers/operations.helper';
-import { Result } from 'src/shared/interfaces/result.interface';
-import { BotInstance } from 'src/shared/instances/bot.instance';
+import { BotService } from 'src/shared/instances/bot.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { TranscaribeService } from '../transcaribe.service';
 
@@ -16,29 +14,10 @@ export class TranscaribeHandler {
   private readonly errorMessage = 'Ha ocurrido un error inesperado';
   constructor(
     private readonly transcaribeService: TranscaribeService,
-    private readonly botInstace: BotInstance,
+    private readonly botInstace: BotService,
   ) {
     this.bot = this.botInstace.getBot();
     this.TARIFA = Const.tarifa;
-  }
-
-  private async sendMessageToUser(
-    chatId: number,
-    message: string,
-    options: TelegramBot.SendMessageOptions = {},
-  ): Promise<TelegramBot.Message> {
-    return await this.bot.sendMessage(chatId, message, options);
-  }
-
-  private async getNumberOnReplyMessageResponse(
-    chatId: number,
-    message_id: number,
-  ): Promise<string> {
-    return new Promise((resolve) => {
-      this.bot.onReplyToMessage(chatId, message_id, (msgToReply) => {
-        resolve(msgToReply.text);
-      });
-    });
   }
 
   private async verifyUser(chatId: string) {
@@ -54,7 +33,7 @@ export class TranscaribeHandler {
       if (await this.verifyUser(msg.chat.id.toString()))
         throw new Error('Ya tienes una tarjeta registrada');
 
-      const firtMsg = await this.sendMessageToUser(
+      const firtMsg = await this.botInstace.sendMessageToUser(
         msg.chat.id,
         'Ingresa el número de la tarjeta que deseas registrar',
         {
@@ -64,12 +43,12 @@ export class TranscaribeHandler {
         },
       );
 
-      const cardApi = await this.getNumberOnReplyMessageResponse(
+      const cardApi = await this.botInstace.getOnReplyMessageResponse(
         msg.chat.id,
         firtMsg.message_id,
       );
 
-      const secondMsg = await this.sendMessageToUser(
+      const secondMsg = await this.botInstace.sendMessageToUser(
         msg.chat.id,
         'Ingresa el Api Key de la tarjeta',
         {
@@ -79,7 +58,7 @@ export class TranscaribeHandler {
         },
       );
 
-      const apiKey = await this.getNumberOnReplyMessageResponse(
+      const apiKey = await this.botInstace.getOnReplyMessageResponse(
         msg.chat.id,
         secondMsg.message_id,
       );
@@ -96,7 +75,7 @@ export class TranscaribeHandler {
         'Tarjeta registrada exitosamente',
       );
     } catch (err) {
-      await this.sendMessageToUser(
+      await this.botInstace.sendMessageToUser(
         msg.chat.id,
         err.message.replace('Error:', '') || this.errorMessage,
       );
@@ -113,9 +92,9 @@ export class TranscaribeHandler {
         msg.chat.id.toString(),
       );
       if (!balance.success) throw new Error(balance.result);
-      await this.sendMessageToUser(msg.chat.id, balance.result);
+      await this.botInstace.sendMessageToUser(msg.chat.id, balance.result);
     } catch (err) {
-      await this.sendMessageToUser(
+      await this.botInstace.sendMessageToUser(
         msg.chat.id,
         err.message || this.errorMessage,
       );
@@ -133,10 +112,10 @@ export class TranscaribeHandler {
       );
       if (!history.success) throw new Error(history.result);
       for (const message of history.result) {
-        await this.sendMessageToUser(msg.chat.id, message);
+        await this.botInstace.sendMessageToUser(msg.chat.id, message);
       }
     } catch (err) {
-      await this.sendMessageToUser(
+      await this.botInstace.sendMessageToUser(
         msg.chat.id,
         err.message || this.errorMessage,
       );
@@ -150,10 +129,10 @@ export class TranscaribeHandler {
         msg.chat.id.toString(),
       );
       if (!cardInfo) throw new Error("cardInfo.result doesn't exist");
-      await this.sendMessageToUser(msg.chat.id, 'Funcionando');
+      await this.botInstace.sendMessageToUser(msg.chat.id, 'Funcionando');
     } catch (err) {
       console.error(err.message);
-      await this.sendMessageToUser(msg.chat.id, this.errorMessage);
+      await this.botInstace.sendMessageToUser(msg.chat.id, this.errorMessage);
       return;
     }
   }

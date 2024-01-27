@@ -1,16 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
-import { BotInstance } from 'src/shared/instances/bot.instance';
+import { BotService } from 'src/shared/instances/bot.service';
 import { PicoyplacaHandler } from 'src/picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from 'src/transcaribe/handlers/transcaribe.handler';
-import { Console } from 'console';
 
 @Injectable()
 export class TelegramService {
   private readonly bot: TelegramBot;
 
   constructor(
-    private readonly botInstance: BotInstance,
+    private readonly botInstance: BotService,
     private readonly picoyplacaHandler: PicoyplacaHandler,
     private readonly transcaribeHandler: TranscaribeHandler,
   ) {
@@ -48,6 +47,14 @@ export class TelegramService {
   private async picoYPlacaListeners() {
     this.bot.onText(/\/pico/, async (msg: TelegramBot.Message) => {
       await this.picoyplacaHandler.picoHandler(msg);
+    });
+
+    this.bot.onText(/\/addCar/, async (msg: TelegramBot.Message) => {
+      await this.picoyplacaHandler.addVehicleHandler(msg);
+    });
+
+    this.bot.onText(/\/allCars/, async (msg: TelegramBot.Message) => {
+      await this.picoyplacaHandler.getVehiclesHandler(msg);
     });
   }
 }

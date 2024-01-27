@@ -18,7 +18,7 @@ model Tarjeta {
 
 model Vehicle {
   id        Int    @id @default(autoincrement())
-  name      String
+  name      String @unique
   lastDigit Int
   userId    String // Ajusta según tus necesidades para almacenar el ID del usuario
 }

@@ -18,7 +18,8 @@ export class VehicleService {
       });
       return { success: true, result };
     } catch (err) {
-      return { success: false, result: 'Error en Prisma (Dev)' };
+      console.error(err);
+      return { success: false, result: err.message || 'Error en Prisma (Dev)' };
     }
   }
 
@@ -28,6 +29,7 @@ export class VehicleService {
       if (!result) throw new Error('No hay vehiculos registrados');
       return { success: true, result };
     } catch (err) {
+      console.error(err);
       return { success: false, result: err.message || 'Error en Prisma (Dev)' };
     }
   }

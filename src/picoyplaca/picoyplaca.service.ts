@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { VehicleService } from 'src/shared/prisma/vehicle.service';
 
 import * as cheerio from 'cheerio';
+import { Vehicle } from '@prisma/client';
 
 @Injectable()
 export class PicoyplacaService {
@@ -13,20 +14,13 @@ export class PicoyplacaService {
 
   async getPicoyplacaInfo(): Promise<string> {
     try {
-      // const url: string =
-      //   'https://www.pyphoy.com/_next/data/x4EcV0xhXDbd6AZNc4I42/cartagena.json?city=cartagena';
-
-      // const response: any = await this.httpService.get(url).toPromise();
-      // const data = response.data;
-      // const numbers = data.pageProps.categories[0].data[0].numbers;
-
       const numbers = await this.getScrapedPicoyplacaInfo();
 
       const responseMessage = this.getPyPMessage(numbers);
 
       return responseMessage;
     } catch (e) {
-      console.log(e.message);
+      console.error(e.message);
       await this.getScrapedPicoyplacaInfo();
       return 'Error al obtener información de Pico y Placa';
     }
@@ -71,7 +65,7 @@ export class PicoyplacaService {
 
   private getPyPMessage(pYpNumbers: number[]): string {
     const emojisNumPicoYPlaca = pYpNumbers.map(this.getEmojiNumber);
-    
+
     return pYpNumbers.length === 0 || pYpNumbers.includes(NaN)
       ? '¡Hoy sin Pico y Placa! 🚗'
       : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(', ')} hoy.`;
@@ -88,11 +82,51 @@ export class PicoyplacaService {
       if (response.success) {
         return `Vehículo ${vehicle.name} agregado correctamente.`;
       } else {
+        console.error(response.result);
         return 'No se ha podido agregar el vehículo.';
       }
     } catch (e) {
       console.error(e);
       return 'Error al agregar el vehículo.';
+    }
+  }
+
+  async vehicleExist(vehicleName: string, userId: number): Promise<boolean> {
+    try {
+      const response = await this.vehicleService.getVehicleWhere({
+        name: vehicleName,
+        userId,
+      });
+
+      if (!response.success || response.result === null) {
+        return true;
+      }
+      return true;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }
+
+  async getVehiclesByUser(userId: number): Promise<string[]> {
+    try {
+      const response = await this.vehicleService.getVehiclesWhere({
+        userId: userId.toString(),
+      });
+
+      if (
+        !response.success ||
+        response.result === null ||
+        response.result.length === 0
+      ) {
+        return null;
+      }
+
+      const vehicles = response.result.map((vehicle: Vehicle) => vehicle.name);
+      return vehicles;
+    } catch (e) {
+      console.error(e);
+      return null;
     }
   }
 }
