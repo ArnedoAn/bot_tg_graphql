@@ -11,17 +11,22 @@ datasource db {
 }
 
 model Tarjeta {
-  id              String      @id
-  // saldoDisponible Float
-  // historial       Historial[]
-  cardId          String      @unique
-  apiCardId       String      @unique
+  id        String @id
+  cardId    String @unique
+  apiCardId String @unique
 }
 
-// model Historial {
-//   id        Int      @id @default(autoincrement())
-//   fecha     DateTime
-//   monto     Float
-//   tarjetaId String
-//   tarjeta   Tarjeta  @relation(fields: [tarjetaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-// }
+model Vehicle {
+  id        Int    @id @default(autoincrement())
+  name      String
+  lastDigit Int
+  userId    String // Ajusta según tus necesidades para almacenar el ID del usuario
+}
+
+model Reminder {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  date        DateTime
+  userId      String // Ajusta según tus necesidades para almacenar el ID del usuario
+}

@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { VehicleService } from 'src/shared/prisma/vehicle.service';
+
 import * as cheerio from 'cheerio';
 
 @Injectable()
 export class PicoyplacaService {
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private readonly vehicleService: VehicleService,
+  ) {}
 
   async getPicoyplacaInfo(): Promise<string> {
     try {
@@ -70,5 +75,24 @@ export class PicoyplacaService {
     return pYpNumbers.length === 0 || pYpNumbers.includes(NaN)
       ? '¡Hoy sin Pico y Placa! 🚗'
       : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(', ')} hoy.`;
+  }
+
+  async addVehicle(vehicle: any): Promise<string> {
+    try {
+      const response = await this.vehicleService.createVehicle({
+        id: 1,
+        lastDigit: vehicle.lastDigit,
+        name: vehicle.name,
+        userId: vehicle.userId,
+      });
+      if (response.success) {
+        return `Vehículo ${vehicle.name} agregado correctamente.`;
+      } else {
+        return 'No se ha podido agregar el vehículo.';
+      }
+    } catch (e) {
+      console.error(e);
+      return 'Error al agregar el vehículo.';
+    }
   }
 }
