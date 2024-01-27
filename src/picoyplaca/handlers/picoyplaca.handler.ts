@@ -21,4 +21,13 @@ export class PicoyplacaHandler {
       await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
     }
   }
+
+  async addVehicleHandler(msg: TelegramBot.Message) {
+    try {
+      const message = await this.pypService.addVehicle(msg);
+      await this.bot.sendMessage(msg.chat.id, message);
+    } catch (err) {
+      await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+    }
+  }
 }
