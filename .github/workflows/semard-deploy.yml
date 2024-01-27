@@ -1,0 +1,38 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      REMOTE_SCRIPT_PATH: ${{ secrets.REMOTE_SCRIPT_PATH }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: '21.2.0'
+          registry-url: 'https://registry.yarnpkg.com/'
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Build application
+        run: yarn build
+
+      - name: Deploy to server
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ env.SSH_USER }}@${{ env.SSH_HOST }} "${{ env.REMOTE_SCRIPT_PATH }}"
