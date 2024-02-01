@@ -56,5 +56,9 @@ export class TelegramService {
     this.bot.onText(/\/allCars/, async (msg: TelegramBot.Message) => {
       await this.picoyplacaHandler.getVehiclesHandler(msg);
     });
+
+    this.bot.onText(/\/noti/, async (msg: TelegramBot.Message) => {
+      await this.picoyplacaHandler.notifyHandler();
+    });
   }
 }

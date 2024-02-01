@@ -86,4 +86,18 @@ export class VehicleService {
       return { success: false, result: 'Error en Prisma (Dev)' };
     }
   }
+
+  async getVehiclesToNotify(todayDigit: number): Promise<Result> {
+    try {
+
+      const result = await this.prisma
+        .$queryRaw`SELECT * FROM filtrar_autos_por_digitos(CAST(${todayDigit} AS integer))`;
+
+      if (!result) throw new Error('No hay vehiculos para notificar');
+      return { success: true, result };
+    } catch (err) {
+      console.error(err);
+      return { success: false, result: err.message || 'Error en Prisma (Dev)' };
+    }
+  }
 }

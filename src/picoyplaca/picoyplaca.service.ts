@@ -129,4 +129,25 @@ export class PicoyplacaService {
       return null;
     }
   }
+
+  async getVehiclesToNotify(): Promise<Vehicle[]> {
+    try {
+      const digit = await this.getScrapedPicoyplacaInfo();
+
+      const response = await this.vehicleService.getVehiclesToNotify(digit[0]);
+
+      if (
+        !response.success ||
+        response.result === null ||
+        response.result.length === 0
+      ) {
+        return null;
+      }
+
+      return response.result;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  }
 }

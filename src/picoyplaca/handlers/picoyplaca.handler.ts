@@ -3,6 +3,7 @@ import { PicoyplacaService } from '../picoyplaca.service';
 import { BotService } from '../../shared/instances/bot.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { Vehicle } from '@prisma/client';
+import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class PicoyplacaHandler {
@@ -12,6 +13,12 @@ export class PicoyplacaHandler {
     private readonly botInstace: BotService,
   ) {
     this.bot = this.botInstace.getBot();
+  }
+
+  @Cron('0 19 * * *') // Ejecuta la tarea a kas 7 pm
+  async executeTask() {
+    await this.notifyHandler();
+    await this.bot.sendMessage(process.env.ADMIN_ID, 'Tarea ejecutada');
   }
 
   async picoHandler(msg: TelegramBot.Message) {
@@ -104,6 +111,24 @@ export class PicoyplacaHandler {
     } catch (err) {
       console.error(err);
       await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+    }
+  }
+
+  async notifyHandler() {
+    try {
+      const vehicles = await this.pypService.getVehiclesToNotify();
+      if (vehicles === null) {
+        return;
+      }
+      vehicles.forEach(async (vehicle) => {
+        await this.bot.sendMessage(
+          process.env.ADMIN_ID,
+          `¡Prepárate! 🚗 Mañana es día de Pico y Placa para tu vehículo: ${vehicle.name}. ¡No olvides ajustar tu ruta!🚦`,
+        );
+      });
+    } catch (err) {
+      console.error(err);
+      await this.bot.sendMessage(process.env.ADMIN_ID, 'Error en el Cron.');
     }
   }
 }
