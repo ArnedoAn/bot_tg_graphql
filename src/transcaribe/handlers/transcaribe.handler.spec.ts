@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TranscaribeHandlerService } from './transcaribe.handler';
+import { TranscaribeHandler } from './transcaribe.handler';
 
 describe('TranscaribeHandlerService', () => {
-  let service: TranscaribeHandlerService;
+  let service: TranscaribeHandler;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TranscaribeHandlerService],
+      providers: [TranscaribeHandler],
     }).compile();
 
-    service = module.get<TranscaribeHandlerService>(TranscaribeHandlerService);
+    service = module.get<TranscaribeHandler>(TranscaribeHandler);
   });
 
   it('should be defined', () => {

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PicoyplacaService } from '../picoyplaca.service';
-import { BotService } from 'src/shared/instances/bot.service';
+import { BotService } from '../../shared/instances/bot.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { Vehicle } from '@prisma/client';
 

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import TelegramBot from 'node-telegram-bot-api';
-import { BotService } from 'src/shared/instances/bot.service';
-import { PicoyplacaHandler } from 'src/picoyplaca/handlers/picoyplaca.handler';
-import { TranscaribeHandler } from 'src/transcaribe/handlers/transcaribe.handler';
+import { BotService } from '../shared/instances/bot.service';
+import { PicoyplacaHandler } from '../picoyplaca/handlers/picoyplaca.handler';
+import { TranscaribeHandler } from '../transcaribe/handlers/transcaribe.handler';
 
 @Injectable()
 export class TelegramService {

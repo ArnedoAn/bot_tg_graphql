@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TelegramService } from './telegram.service';
-import { PicoyplacaModule } from 'src/picoyplaca/picoyplaca.module';
-import { TranscaribeModule } from 'src/transcaribe/transcaribe.module';
-import { SharedModule } from 'src/shared/shared.module';
+import { PicoyplacaModule } from '../picoyplaca/picoyplaca.module';
+import { TranscaribeModule } from '../transcaribe/transcaribe.module';
+import { SharedModule } from '../shared/shared.module';
 
 describe('TelegramService', () => {
   let service: TelegramService;

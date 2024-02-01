@@ -3,7 +3,7 @@ import {
   CONSTANTS as Const,
   setUTCDate as dateFormat,
 } from '../helpers/operations.helper';
-import { BotService } from 'src/shared/instances/bot.service';
+import { BotService } from '../../shared/instances/bot.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { TranscaribeService } from '../transcaribe.service';
 

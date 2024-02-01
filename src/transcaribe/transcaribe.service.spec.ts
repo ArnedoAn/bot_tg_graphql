@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TranscaribeService } from './transcaribe.service';
-import { PrismaModule } from 'src/shared/prisma/prisma.module';
-import { SharedModule } from 'src/shared/shared.module';
+import { PrismaModule } from '../shared/prisma/prisma.module';
+import { SharedModule } from '../shared/shared.module';
 
 describe('TranscaribeService', () => {
   let service: TranscaribeService;

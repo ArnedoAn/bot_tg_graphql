@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { TarjetaService } from 'src/shared/prisma/tarjeta.service';
+import { TarjetaService } from '../shared/prisma/tarjeta.service';
 import { CONSTANTS as Const } from './helpers/operations.helper';
-import { Result } from 'src/shared/interfaces/result.interface';
+import { Result } from '../shared/interfaces/result.interface';
 import { HttpService } from '@nestjs/axios';
 import { CardData, Transaction } from './interfaces/api.interfaces';
 import { ApiRequest } from './interfaces/apiCall.interface';

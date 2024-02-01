@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { VehicleService } from 'src/shared/prisma/vehicle.service';
+import { VehicleService } from '../shared/prisma/vehicle.service';
 
 import * as cheerio from 'cheerio';
 import { Vehicle } from '@prisma/client';
