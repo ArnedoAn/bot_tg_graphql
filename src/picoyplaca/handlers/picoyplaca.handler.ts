@@ -117,12 +117,16 @@ export class PicoyplacaHandler {
   async notifyHandler() {
     try {
       const vehicles = await this.pypService.getVehiclesToNotify();
-      if (vehicles === null) {
+      if (
+        vehicles === null ||
+        vehicles.length === 0 ||
+        !Array.isArray(vehicles)
+      ) {
         return;
       }
       vehicles.forEach(async (vehicle) => {
         await this.bot.sendMessage(
-          process.env.ADMIN_ID,
+          vehicle.userId,
           `¡Prepárate! 🚗 Mañana es día de Pico y Placa para tu vehículo: ${vehicle.name}. ¡No olvides ajustar tu ruta!🚦`,
         );
       });

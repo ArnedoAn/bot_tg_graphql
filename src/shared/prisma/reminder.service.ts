@@ -7,7 +7,7 @@ import { Result } from '../interfaces/result.interface';
 export class ReminderService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createReminder(reminder: Reminder): Promise<Result> {
+  async createReminder(reminder: Reminder): Promise<Result<Reminder | string>> {
     try {
       const result = await this.prisma.reminder.create({
         data: reminder,
@@ -18,7 +18,7 @@ export class ReminderService {
     }
   }
 
-  async getAllReminders(): Promise<Result> {
+  async getAllReminders(): Promise<Result<Reminder[] | string>> {
     try {
       const result = await this.prisma.reminder.findMany();
       if (!result) throw new Error('No hay recordatorios registrados');
@@ -28,7 +28,7 @@ export class ReminderService {
     }
   }
 
-  async getReminderWhere(data: any): Promise<Result> {
+  async getReminderWhere(data: any): Promise<Result<Reminder | string>> {
     try {
       const result = await this.prisma.reminder.findUnique({
         where: data,
@@ -40,7 +40,7 @@ export class ReminderService {
     }
   }
 
-  async getRemindersWhere(data: any): Promise<Result> {
+  async getRemindersWhere(data: any): Promise<Result<Reminder[] | string>> {
     try {
       const result = await this.prisma.reminder.findMany({
         where: data,
@@ -52,7 +52,10 @@ export class ReminderService {
     }
   }
 
-  async updateReminder(id: number, data: any): Promise<Result> {
+  async updateReminder(
+    id: number,
+    data: any,
+  ): Promise<Result<Reminder | string>> {
     try {
       const result = await this.prisma.reminder.update({
         where: {

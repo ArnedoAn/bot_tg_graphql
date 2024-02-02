@@ -5,6 +5,7 @@ import { Result } from '../shared/interfaces/result.interface';
 import { HttpService } from '@nestjs/axios';
 import { CardData, Transaction } from './interfaces/api.interfaces';
 import { ApiRequest } from './interfaces/apiCall.interface';
+import { Tarjeta } from '@prisma/client';
 
 @Injectable()
 export class TranscaribeService {
@@ -52,7 +53,7 @@ export class TranscaribeService {
     }
   }
 
-  async getBalance(id: string): Promise<Result> {
+  async getBalance(id: string): Promise<Result<string>> {
     try {
       const apiData = await this.getCardInfo(id);
       if (!apiData) throw new Error('Tarjeta no encontrada');
@@ -78,7 +79,7 @@ export class TranscaribeService {
     ${action}: ${amount}`;
   }
 
-  async getHistory(id: string): Promise<Result> {
+  async getHistory(id: string): Promise<Result<string[]>> {
     try {
       const apiData = await this.getCardInfo(id);
       if (!apiData) throw new Error('Tarjeta no encontrada');
@@ -96,15 +97,15 @@ export class TranscaribeService {
     id: string,
     cardId: string,
     apiKey: string,
-  ): Promise<Result> {
+  ): Promise<Result<string | Tarjeta>> {
     try {
-      const result = await this.tarjetaService.createTarjeta({
+      const resultService = await this.tarjetaService.createTarjeta({
         id,
         cardId,
         apiCardId: apiKey,
       });
-      if (!result) throw new Error('Tarjeta no encontrada');
-      return { success: true, result };
+      if (!resultService.success) throw new Error('Tarjeta no encontrada');
+      return { success: true, result: resultService.result };
     } catch (e) {
       console.error(e);
       return { success: false, result: e.message };
@@ -114,7 +115,8 @@ export class TranscaribeService {
   async getCardInfo(id: string): Promise<CardData> {
     try {
       const result = await this.getCardApiInfo(id);
-      if (!result) throw new Error('Tarjeta no encontrada');
+      if (!result || typeof result === 'string')
+        throw new Error('Tarjeta no encontrada');
       const url =
         'http://recaudo.sondapay.com/recaudowsrest/producto/consultaTrx';
       const data = result;
@@ -127,7 +129,7 @@ export class TranscaribeService {
     }
   }
 
-  private async getCardApiInfo(id: string): Promise<ApiRequest> {
+  private async getCardApiInfo(id: string): Promise<ApiRequest | string> {
     try {
       const result = await this.tarjetaService.getInfoTarjetaFromApi(id);
       if (!result.success) throw new Error('Tarjeta no encontrada');

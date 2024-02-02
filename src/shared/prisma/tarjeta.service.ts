@@ -2,12 +2,13 @@ import { PrismaService } from './prisma.service';
 import { Tarjeta } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 import { Result } from '../interfaces/result.interface';
+import { ApiRequest } from '../../transcaribe/interfaces/apiCall.interface';
 
 @Injectable()
 export class TarjetaService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createTarjeta(card: Tarjeta): Promise<Result> {
+  async createTarjeta(card: Tarjeta): Promise<Result<Tarjeta | string>> {
     try {
       const result = await this.prisma.tarjeta.create({
         data: card,
@@ -18,9 +19,12 @@ export class TarjetaService {
     }
   }
 
-  async getInfoTarjetaFromApi(id: string): Promise<Result> {
+  async getInfoTarjetaFromApi(
+    id: string,
+  ): Promise<Result<ApiRequest | string>> {
     try {
-      const result: any = await this.prisma.$queryRaw`SELECT api_card_call(${id})`;
+      const result: any = await this.prisma
+        .$queryRaw`SELECT api_card_call(${id})`;
       if (!result) throw new Error('Tarjeta no encontrada');
       return { success: true, result: result[0].api_card_call };
     } catch (err) {
@@ -29,7 +33,7 @@ export class TarjetaService {
     }
   }
 
-  async getAllTarjetas(): Promise<Result> {
+  async getAllTarjetas(): Promise<Result<Tarjeta[] | string>> {
     try {
       const result = await this.prisma.tarjeta.findMany();
       if (!result) throw new Error('No hay tarjetas registradas');
@@ -39,7 +43,7 @@ export class TarjetaService {
     }
   }
 
-  async getTarjetaWhere(data: any): Promise<Result> {
+  async getTarjetaWhere(data: any): Promise<Result<Tarjeta | string>> {
     try {
       const result = await this.prisma.tarjeta.findUnique({
         where: data,
@@ -51,7 +55,7 @@ export class TarjetaService {
     }
   }
 
-  async getTarjetasWhere(data: any): Promise<Result> {
+  async getTarjetasWhere(data: any): Promise<Result<Tarjeta[] | string>> {
     try {
       const result = await this.prisma.tarjeta.findMany({
         where: data,
@@ -63,7 +67,10 @@ export class TarjetaService {
     }
   }
 
-  async updateTarjeta(id: string, data: any): Promise<Result> {
+  async updateTarjeta(
+    id: string,
+    data: any,
+  ): Promise<Result<Tarjeta | string>> {
     try {
       const result = await this.prisma.tarjeta.update({
         where: {
@@ -77,7 +84,7 @@ export class TarjetaService {
     }
   }
 
-  async deleteTarjeta(id: string): Promise<Result> {
+  async deleteTarjeta(id: string): Promise<Result<Tarjeta | string>> {
     try {
       const result = await this.prisma.tarjeta.delete({
         where: {

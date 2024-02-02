@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { VehicleService } from '../shared/prisma/vehicle.service';
-
 import * as cheerio from 'cheerio';
 import { Vehicle } from '@prisma/client';
 
@@ -71,7 +70,7 @@ export class PicoyplacaService {
       : `⚠️ Pico y Placa: ${emojisNumPicoYPlaca.join(', ')} hoy.`;
   }
 
-  async addVehicle(vehicle: any): Promise<string> {
+  async addVehicle(vehicle: Vehicle): Promise<string> {
     try {
       const response = await this.vehicleService.createVehicle({
         id: 1,
@@ -117,7 +116,8 @@ export class PicoyplacaService {
       if (
         !response.success ||
         response.result === null ||
-        response.result.length === 0
+        response.result.length === 0 ||
+        !Array.isArray(response.result)
       ) {
         return null;
       }
@@ -130,7 +130,7 @@ export class PicoyplacaService {
     }
   }
 
-  async getVehiclesToNotify(): Promise<Vehicle[]> {
+  async getVehiclesToNotify(): Promise<Vehicle[] | string> {
     try {
       const digit = await this.getScrapedPicoyplacaInfo();
 

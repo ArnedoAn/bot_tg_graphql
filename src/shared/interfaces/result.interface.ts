@@ -1,4 +1,4 @@
-export interface Result {
+export interface Result<T> {
   success: boolean;
-  result: any;
+  result: T;
 }

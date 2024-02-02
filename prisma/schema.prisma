@@ -29,4 +29,5 @@ model Reminder {
   description String
   date        DateTime
   userId      String // Ajusta según tus necesidades para almacenar el ID del usuario
+  notified    Boolean  @default(false)
 }

@@ -7,7 +7,7 @@ import { Result } from '../interfaces/result.interface';
 export class VehicleService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createVehicle(vehicle: Vehicle): Promise<Result> {
+  async createVehicle(vehicle: Vehicle): Promise<Result<Vehicle | string>> {
     try {
       const result = await this.prisma.vehicle.create({
         data: {
@@ -23,7 +23,7 @@ export class VehicleService {
     }
   }
 
-  async getAllVehicles(): Promise<Result> {
+  async getAllVehicles(): Promise<Result<Vehicle[] | string>> {
     try {
       const result = await this.prisma.vehicle.findMany();
       if (!result) throw new Error('No hay vehiculos registrados');
@@ -34,7 +34,7 @@ export class VehicleService {
     }
   }
 
-  async getVehicleWhere(data: any): Promise<Result> {
+  async getVehicleWhere(data: any): Promise<Result<Vehicle | string>> {
     try {
       const result = await this.prisma.vehicle.findUnique({
         where: data,
@@ -46,7 +46,7 @@ export class VehicleService {
     }
   }
 
-  async getVehiclesWhere(data: any): Promise<Result> {
+  async getVehiclesWhere(data: any): Promise<Result<Vehicle[] | string>> {
     try {
       const result = await this.prisma.vehicle.findMany({
         where: data,
@@ -58,7 +58,10 @@ export class VehicleService {
     }
   }
 
-  async updateVehicle(id: number, data: any): Promise<Result> {
+  async updateVehicle(
+    id: number,
+    data: any,
+  ): Promise<Result<Vehicle | string>> {
     try {
       const result = await this.prisma.vehicle.update({
         where: {
@@ -73,7 +76,7 @@ export class VehicleService {
     }
   }
 
-  async deleteVehicle(id: number): Promise<Result> {
+  async deleteVehicle(id: number): Promise<Result<Vehicle | string>> {
     try {
       const result = await this.prisma.vehicle.delete({
         where: {
@@ -87,10 +90,11 @@ export class VehicleService {
     }
   }
 
-  async getVehiclesToNotify(todayDigit: number): Promise<Result> {
+  async getVehiclesToNotify(
+    todayDigit: number,
+  ): Promise<Result<Vehicle[] | string>> {
     try {
-
-      const result = await this.prisma
+      const result: any = await this.prisma
         .$queryRaw`SELECT * FROM filtrar_autos_por_digitos(CAST(${todayDigit} AS integer))`;
 
       if (!result) throw new Error('No hay vehiculos para notificar');

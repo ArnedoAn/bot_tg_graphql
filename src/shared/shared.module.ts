@@ -4,7 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   providers: [BotService],
-  exports: [BotService],
+  exports: [BotService, PrismaModule],
   imports: [PrismaModule],
 })
 export class SharedModule {}
