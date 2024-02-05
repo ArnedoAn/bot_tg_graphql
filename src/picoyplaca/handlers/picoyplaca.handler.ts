@@ -31,8 +31,8 @@ export class PicoyplacaHandler {
   }
 
   async addVehicleHandler(msg: TelegramBot.Message) {
-    try {
-      const firtMsg = await this.bot.sendMessage(
+  try {
+    const firtMsg = await this.bot.sendMessage(
         msg.chat.id,
         'Ingresa el nombre del vehículo que deseas trackear',
         {
