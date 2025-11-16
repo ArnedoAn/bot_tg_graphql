@@ -7,6 +7,7 @@ import { TranscaribeModule } from './transcaribe/transcaribe.module';
 import { PicoyplacaModule } from './picoyplaca/picoyplaca.module';
 import { SharedModule } from './shared/shared.module';
 import { RemindersModule } from './reminders/reminders.module';
+import { DevopsModule } from './devops/devops.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RemindersModule } from './reminders/reminders.module';
     PicoyplacaModule,
     SharedModule,
     RemindersModule,
+    DevopsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

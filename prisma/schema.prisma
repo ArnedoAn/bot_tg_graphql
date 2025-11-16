@@ -20,7 +20,7 @@ model Vehicle {
   id        Int    @id @default(autoincrement())
   name      String @unique
   lastDigit Int
-  userId    String // Ajusta según tus necesidades para almacenar el ID del usuario
+  userId    String 
 }
 
 model Reminder {
@@ -28,5 +28,5 @@ model Reminder {
   title       String
   description String
   date        DateTime
-  userId      String // Ajusta según tus necesidades para almacenar el ID del usuario
+  userId      String
 }

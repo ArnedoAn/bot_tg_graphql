@@ -3,9 +3,10 @@ import { TelegramService } from './telegram.service';
 import { PicoyplacaModule } from '../picoyplaca/picoyplaca.module';
 import { SharedModule } from '../shared/shared.module';
 import { TranscaribeModule } from '../transcaribe/transcaribe.module';
+import { DevopsModule } from 'src/devops/devops.module';
 
 @Module({
   providers: [TelegramService],
-  imports: [PicoyplacaModule, SharedModule, TranscaribeModule],
+  imports: [PicoyplacaModule, SharedModule, TranscaribeModule, DevopsModule],
 })
 export class TelegramModule {}

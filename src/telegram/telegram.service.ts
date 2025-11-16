@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { BotService } from '../shared/instances/bot.service';
 import { PicoyplacaHandler } from '../picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from '../transcaribe/handlers/transcaribe.handler';
+import { DevopsHandler } from '../devops/handlers/devops.handler';
 
 @Injectable()
 export class TelegramService {
@@ -12,6 +13,7 @@ export class TelegramService {
     private readonly botInstance: BotService,
     private readonly picoyplacaHandler: PicoyplacaHandler,
     private readonly transcaribeHandler: TranscaribeHandler,
+    private readonly devopsHandler: DevopsHandler,
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
@@ -24,6 +26,17 @@ export class TelegramService {
 
     this.transcaribeListeners();
     this.picoYPlacaListeners();
+    this.devopsListeners();
+  }
+
+  private async devopsListeners() {
+    this.bot.onText(/\/dnsupdate/, async (msg: TelegramBot.Message) => {
+      await this.devopsHandler.dnsUpdateHandler(msg);
+    });
+
+    this.bot.onText(/\/testconnection/, async (msg: TelegramBot.Message) => {
+      await this.devopsHandler.testConnectionHandler(msg);
+    });
   }
 
   private async transcaribeListeners() {
