@@ -21,8 +21,7 @@ export interface ScriptExecutionResult {
 export class DevopsService {
   private readonly logger = new Logger(DevopsService.name);
   private readonly sshConfig: SSHConfig;
-  private readonly DNS_UPDATE_COMMAND =
-    '/usr/bin/python3 /home/andres/dns-update/dns.py';
+  private readonly DNS_UPDATE_COMMAND: string;
 
   constructor(private readonly configService: ConfigService) {
     this.sshConfig = {
@@ -32,6 +31,13 @@ export class DevopsService {
       password: this.configService.get<string>('SSH_PASSWORD'),
       privateKey: this.configService.get<string>('SSH_PRIVATE_KEY'),
     };
+
+    // Get DNS update command from env or use default path
+    const dnsUpdatePath = this.configService.get<string>(
+      'DNS_UPDATE_SCRIPT_PATH',
+      '/home/andres/dns-update/dns.py',
+    );
+    this.DNS_UPDATE_COMMAND = `/usr/bin/python3 ${dnsUpdatePath}`;
   }
 
   /**
