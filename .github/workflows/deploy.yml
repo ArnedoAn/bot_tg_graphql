@@ -55,4 +55,4 @@ jobs:
         run: |
           curl -X GET \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            "https://services.toothless.codes/api/v1/deploy?uuid=ow08gsgww44co4cgo484gko4&force=false"
+            "https://services.toothless.codes/api/v1/deploy?uuid=ow08gsgww44co4cgo484gko4&force=true"
