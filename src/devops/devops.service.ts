@@ -21,7 +21,7 @@ export interface ScriptExecutionResult {
 export class DevopsService {
   private readonly logger = new Logger(DevopsService.name);
   private readonly sshConfig: SSHConfig;
-  private readonly DNS_UPDATE_COMMAND: string;
+  private readonly DNS_SCRIPT_PATH: string;
   private ssh: NodeSSH;
 
   constructor(private readonly configService: ConfigService) {
@@ -34,12 +34,15 @@ export class DevopsService {
       privateKeyPath: this.configService.get<string>('SSH_PRIVATE_KEY_PATH'),
     };
 
-    // Get DNS update command from env or use default path
-    const dnsUpdatePath = this.configService.get<string>(
+    // Get DNS script path from env or use default
+    this.DNS_SCRIPT_PATH = this.configService.get<string>(
       'DNS_UPDATE_SCRIPT_PATH',
       '/home/andres/dns-update/dns.py',
     );
-    this.DNS_UPDATE_COMMAND = `/usr/bin/python3 ${dnsUpdatePath}`;
+  }
+
+  private getDNSCommand(args: string = ''): string {
+    return `/usr/bin/python3 ${this.DNS_SCRIPT_PATH} ${args}`.trim();
   }
 
   /**
@@ -53,7 +56,7 @@ export class DevopsService {
         throw new Error('SSH connection is not available');
       }
       this.logger.log('Starting DNS update via SSH...');
-      const result = await this.executeSSHCommand(this.DNS_UPDATE_COMMAND);
+      const result = await this.executeSSHCommand(this.getDNSCommand());
       this.logger.log('DNS update completed.');
       return result;
     } catch (error) {
@@ -139,12 +142,55 @@ export class DevopsService {
       }
 
       this.logger.log(`Adding DNS subdomain: ${sanitized}`);
-      const command = `${this.DNS_UPDATE_COMMAND} --add "${sanitized}"`;
+      const command = this.getDNSCommand(`--add "${sanitized}"`);
       const result = await this.executeSSHCommand(command);
       this.logger.log(`DNS subdomain add completed for: ${sanitized}`);
       return result;
     } catch (error) {
       this.logger.error(`DNS subdomain add failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * List all DNS subdomains
+   * @param detailed - Whether to show detailed information
+   * @returns Promise with execution result
+   */
+  async listDNSSubdomains(detailed: boolean = false): Promise<ScriptExecutionResult> {
+    try {
+      this.logger.log('Listing DNS subdomains...');
+      const args = detailed ? '--list --detailed' : '--list';
+      const command = this.getDNSCommand(args);
+      const result = await this.executeSSHCommand(command);
+      this.logger.log('DNS subdomain list completed.');
+      return result;
+    } catch (error) {
+      this.logger.error(`DNS subdomain list failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a DNS subdomain
+   * @param subdomain - The subdomain name to delete
+   * @returns Promise with execution result
+   */
+  async deleteDNSSubdomain(subdomain: string): Promise<ScriptExecutionResult> {
+    try {
+      // Sanitize subdomain input
+      const sanitized = subdomain.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!sanitized) {
+        throw new Error('Invalid subdomain name');
+      }
+
+      this.logger.log(`Deleting DNS subdomain: ${sanitized}`);
+      const command = this.getDNSCommand(`--delete "${sanitized}"`);
+      const result = await this.executeSSHCommand(command);
+      this.logger.log(`DNS subdomain delete completed for: ${sanitized}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`DNS subdomain delete failed: ${error.message}`);
       throw error;
     }
   }

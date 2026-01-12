@@ -111,6 +111,14 @@ export class TelegramService {
     this.bot.onText(/\/addsubdomain/, async (msg: TelegramBot.Message) => {
       await this.devopsHandler.addSubdomainHandler(msg);
     });
+
+    this.bot.onText(/\/listsubdomains/, async (msg: TelegramBot.Message) => {
+      await this.devopsHandler.listSubdomainsHandler(msg);
+    });
+
+    this.bot.onText(/\/deletesubdomain/, async (msg: TelegramBot.Message) => {
+      await this.devopsHandler.deleteSubdomainHandler(msg);
+    });
   }
 
   private async transcaribeListeners() {
