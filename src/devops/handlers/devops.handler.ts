@@ -15,17 +15,52 @@ export class DevopsHandler {
     this.bot = this.botInstance.getBot();
   }
 
-  async dnsUpdateHandler(msg: TelegramBot.Message) {
+  getMenuOptions(): TelegramBot.InlineKeyboardButton[][] {
+    return [
+      [{ text: '🔄 Actualizar DNS', callback_data: 'devops:dns_update' }],
+      [{ text: '➕ Agregar Subdominio', callback_data: 'devops:add_subdomain' }],
+      [{ text: '🔌 Test Conexión SSH', callback_data: 'devops:test_connection' }],
+      [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
+    ];
+  }
+
+  async showMenu(chatId: number) {
+    await this.botInstance.sendMessageToUser(
+      chatId,
+      '🔧 *DevOps Menu*\n\nSelecciona una opción:',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: this.getMenuOptions(),
+        },
+      },
+    );
+  }
+
+  async handleCallback(chatId: number, action: string) {
+    switch (action) {
+      case 'dns_update':
+        await this.dnsUpdateAction(chatId);
+        break;
+      case 'add_subdomain':
+        await this.addSubdomainAction(chatId);
+        break;
+      case 'test_connection':
+        await this.testConnectionAction(chatId);
+        break;
+    }
+  }
+
+  private async dnsUpdateAction(chatId: number) {
     try {
       await this.botInstance.sendMessageToUser(
-        msg.chat.id,
+        chatId,
         '🔄 Iniciando actualización de DNS...',
       );
 
       const result = await this.devopsService.executeDNSUpdate();
 
       let responseMessage = '';
-      
       if (result.success) {
         responseMessage = `✅ DNS actualizado exitosamente\n\n`;
         if (result.stdout) {
@@ -36,25 +71,21 @@ export class DevopsHandler {
         if (result.stderr) {
           responseMessage += `⚠️ Error:\n${result.stderr}`;
         }
-        if (result.exitCode) {
-          responseMessage += `\n\nCódigo de salida: ${result.exitCode}`;
-        }
       }
 
-      await this.botInstance.sendMessageToUser(msg.chat.id, responseMessage);
+      await this.botInstance.sendMessageToUser(chatId, responseMessage);
     } catch (err) {
       await this.botInstance.sendMessageToUser(
-        msg.chat.id,
+        chatId,
         `❌ ${err.message || this.errorMessage}`,
       );
-      return;
     }
   }
 
-  async testConnectionHandler(msg: TelegramBot.Message) {
+  private async testConnectionAction(chatId: number) {
     try {
       await this.botInstance.sendMessageToUser(
-        msg.chat.id,
+        chatId,
         '🔍 Probando conexión SSH...',
       );
 
@@ -64,13 +95,70 @@ export class DevopsHandler {
         ? '✅ Conexión SSH exitosa'
         : '❌ Fallo en la conexión SSH';
 
-      await this.botInstance.sendMessageToUser(msg.chat.id, responseMessage);
+      await this.botInstance.sendMessageToUser(chatId, responseMessage);
     } catch (err) {
       await this.botInstance.sendMessageToUser(
-        msg.chat.id,
+        chatId,
         `❌ ${err.message || this.errorMessage}`,
       );
-      return;
     }
+  }
+
+  private async addSubdomainAction(chatId: number) {
+    try {
+      const promptMsg = await this.botInstance.sendMessageToUser(
+        chatId,
+        '🌐 Ingresa el nombre del subdominio que deseas agregar:\n\n_Ejemplo: api, blog, app_',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { force_reply: true },
+        },
+      );
+
+      const subdomain = await this.botInstance.getOnReplyMessageResponse(
+        chatId,
+        promptMsg.message_id,
+      );
+
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        `🔄 Agregando subdominio "${subdomain}"...`,
+      );
+
+      const result = await this.devopsService.addDNSSubdomain(subdomain);
+
+      let responseMessage = '';
+      if (result.success) {
+        responseMessage = `✅ Subdominio "${subdomain}" agregado exitosamente\n\n`;
+        if (result.stdout) {
+          responseMessage += `📋 Resultado:\n${result.stdout}`;
+        }
+      } else {
+        responseMessage = `❌ Error al agregar subdominio\n\n`;
+        if (result.stderr) {
+          responseMessage += `⚠️ Error:\n${result.stderr}`;
+        }
+      }
+
+      await this.botInstance.sendMessageToUser(chatId, responseMessage);
+    } catch (err) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        `❌ ${err.message || this.errorMessage}`,
+      );
+    }
+  }
+
+  // Legacy handlers for direct commands
+  async dnsUpdateHandler(msg: TelegramBot.Message) {
+    await this.dnsUpdateAction(msg.chat.id);
+  }
+
+  async testConnectionHandler(msg: TelegramBot.Message) {
+    await this.testConnectionAction(msg.chat.id);
+  }
+
+  async addSubdomainHandler(msg: TelegramBot.Message) {
+    await this.addSubdomainAction(msg.chat.id);
   }
 }

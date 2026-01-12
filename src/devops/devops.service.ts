@@ -124,4 +124,28 @@ export class DevopsService {
       return false;
     }
   }
+
+  /**
+   * Add a DNS subdomain/proxy entry
+   * @param subdomain - The subdomain name to add (e.g., "api", "blog")
+   * @returns Promise with execution result
+   */
+  async addDNSSubdomain(subdomain: string): Promise<ScriptExecutionResult> {
+    try {
+      // Sanitize subdomain input
+      const sanitized = subdomain.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      if (!sanitized) {
+        throw new Error('Invalid subdomain name');
+      }
+
+      this.logger.log(`Adding DNS subdomain: ${sanitized}`);
+      const command = `${this.DNS_UPDATE_COMMAND} --add "${sanitized}"`;
+      const result = await this.executeSSHCommand(command);
+      this.logger.log(`DNS subdomain add completed for: ${sanitized}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`DNS subdomain add failed: ${error.message}`);
+      throw error;
+    }
+  }
 }

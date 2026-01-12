@@ -19,13 +19,13 @@ services:
       timeout: 5s
       retries: 5
   app:
-    image: 'registry.toothless.codes/telegram-bot:latest'
+    image: 'registry.toothless.codes/bot-telegram-personal:latest'
     pull_policy: always
     container_name: bot_tg_app
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ~/.ssh/id_rsa_bot:/root/.ssh/id_rsa:ro
+      - /root/.ssh/id_rsa_bot:/root/.ssh/id_rsa:ro
     depends_on:
       postgres:
         condition: service_healthy

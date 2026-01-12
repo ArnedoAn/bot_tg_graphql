@@ -8,6 +8,8 @@ import { Cron } from '@nestjs/schedule';
 @Injectable()
 export class PicoyplacaHandler {
   private readonly bot: TelegramBot;
+  private readonly errorMessage = 'Ha ocurrido un error inesperado';
+
   constructor(
     private readonly pypService: PicoyplacaService,
     private readonly botInstace: BotService,
@@ -15,25 +17,61 @@ export class PicoyplacaHandler {
     this.bot = this.botInstace.getBot();
   }
 
-  @Cron('0 19 * * *') // Ejecuta la tarea a kas 7 pm
+  getMenuOptions(): TelegramBot.InlineKeyboardButton[][] {
+    return [
+      [{ text: '🚦 Consultar Pico y Placa', callback_data: 'picoyplaca:consultar' }],
+      [{ text: '🚗 Agregar Vehículo', callback_data: 'picoyplaca:add_car' }],
+      [{ text: '📋 Mis Vehículos', callback_data: 'picoyplaca:all_cars' }],
+      [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
+    ];
+  }
+
+  async showMenu(chatId: number) {
+    await this.botInstace.sendMessageToUser(
+      chatId,
+      '🚗 *Pico y Placa Menu*\n\nSelecciona una opción:',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: this.getMenuOptions(),
+        },
+      },
+    );
+  }
+
+  async handleCallback(chatId: number, action: string) {
+    switch (action) {
+      case 'consultar':
+        await this.picoAction(chatId);
+        break;
+      case 'add_car':
+        await this.addVehicleAction(chatId);
+        break;
+      case 'all_cars':
+        await this.getVehiclesAction(chatId);
+        break;
+    }
+  }
+
+  @Cron('0 19 * * *') // Ejecuta la tarea a las 7 pm
   async executeTask() {
     await this.notifyHandler();
     await this.bot.sendMessage(process.env.ADMIN_ID, 'Tarea ejecutada');
   }
 
-  async picoHandler(msg: TelegramBot.Message) {
+  private async picoAction(chatId: number) {
     try {
       const message = await this.pypService.getPicoyplacaInfo();
-      await this.bot.sendMessage(msg.chat.id, message);
+      await this.bot.sendMessage(chatId, message);
     } catch (err) {
-      await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+      await this.bot.sendMessage(chatId, this.errorMessage);
     }
   }
 
-  async addVehicleHandler(msg: TelegramBot.Message) {
+  private async addVehicleAction(chatId: number) {
     try {
       const firtMsg = await this.bot.sendMessage(
-        msg.chat.id,
+        chatId,
         'Ingresa el nombre del vehículo que deseas trackear',
         {
           reply_markup: {
@@ -43,22 +81,20 @@ export class PicoyplacaHandler {
       );
 
       const vehicleName = await this.botInstace.getOnReplyMessageResponse(
-        msg.chat.id,
+        chatId,
         firtMsg.message_id,
       );
 
-      if (
-        (await this.pypService.vehicleExist(firtMsg.text, msg.chat.id)) === true
-      ) {
+      if ((await this.pypService.vehicleExist(vehicleName, chatId)) === true) {
         await this.bot.sendMessage(
-          msg.chat.id,
+          chatId,
           'Ya tienes este vehículo registrado',
         );
         return;
       }
 
       const secondMsg = await this.bot.sendMessage(
-        msg.chat.id,
+        chatId,
         `Ingresa el ultimo digito de la placa de ${vehicleName}`,
         {
           reply_markup: {
@@ -68,7 +104,7 @@ export class PicoyplacaHandler {
       );
 
       const lastDigit = await this.botInstace.getOnReplyMessageResponse(
-        msg.chat.id,
+        chatId,
         secondMsg.message_id,
       );
 
@@ -76,42 +112,55 @@ export class PicoyplacaHandler {
         id: 1,
         name: vehicleName,
         lastDigit: Number(lastDigit),
-        userId: msg.chat.id.toString(),
+        userId: chatId.toString(),
       };
 
       const vehicleCreated = await this.pypService.addVehicle(vehicle);
 
-      await this.bot.sendMessage(msg.chat.id, vehicleCreated);
+      await this.bot.sendMessage(chatId, vehicleCreated);
     } catch (err) {
       console.error(err);
-      await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+      await this.bot.sendMessage(chatId, this.errorMessage);
     }
   }
 
-  async getVehiclesHandler(msg: TelegramBot.Message) {
+  private async getVehiclesAction(chatId: number) {
     try {
-      const vehicles = await this.pypService.getVehiclesByUser(msg.chat.id);
+      const vehicles = await this.pypService.getVehiclesByUser(chatId);
 
       if (vehicles === null) {
         await this.bot.sendMessage(
-          msg.chat.id,
+          chatId,
           'No tienes vehículos registrados.',
         );
         return;
       }
 
       await this.bot.sendMessage(
-        msg.chat.id,
+        chatId,
         'Estos son tus vehículos registrados 🚙',
       );
 
-      vehicles.forEach(async (vehicle) => {
-        await this.bot.sendMessage(msg.chat.id, vehicle);
-      });
+      for (const vehicle of vehicles) {
+        await this.bot.sendMessage(chatId, vehicle);
+      }
     } catch (err) {
       console.error(err);
-      await this.bot.sendMessage(msg.chat.id, 'Error en el servidor.');
+      await this.bot.sendMessage(chatId, this.errorMessage);
     }
+  }
+
+  // Legacy handlers for direct commands
+  async picoHandler(msg: TelegramBot.Message) {
+    await this.picoAction(msg.chat.id);
+  }
+
+  async addVehicleHandler(msg: TelegramBot.Message) {
+    await this.addVehicleAction(msg.chat.id);
+  }
+
+  async getVehiclesHandler(msg: TelegramBot.Message) {
+    await this.getVehiclesAction(msg.chat.id);
   }
 
   async notifyHandler() {
@@ -120,12 +169,12 @@ export class PicoyplacaHandler {
       if (vehicles === null) {
         return;
       }
-      vehicles.forEach(async (vehicle) => {
+      for (const vehicle of vehicles) {
         await this.bot.sendMessage(
           process.env.ADMIN_ID,
           `¡Prepárate! 🚗 Mañana es día de Pico y Placa para tu vehículo: ${vehicle.name}. ¡No olvides ajustar tu ruta!🚦`,
         );
-      });
+      }
     } catch (err) {
       console.error(err);
       await this.bot.sendMessage(process.env.ADMIN_ID, 'Error en el Cron.');

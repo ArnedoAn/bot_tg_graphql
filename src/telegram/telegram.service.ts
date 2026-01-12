@@ -17,11 +17,81 @@ export class TelegramService {
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
+    this.setupCallbackHandlers();
+  }
+
+  private getMainMenuOptions(): TelegramBot.InlineKeyboardButton[][] {
+    return [
+      [{ text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' }],
+      [{ text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' }],
+      [{ text: '🔧 DevOps', callback_data: 'menu:devops' }],
+    ];
+  }
+
+  private async showMainMenu(chatId: number) {
+    await this.botInstance.sendMessageToUser(
+      chatId,
+      '🤖 *Menú Principal*\n\nSelecciona un módulo:',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: this.getMainMenuOptions(),
+        },
+      },
+    );
+  }
+
+  private setupCallbackHandlers() {
+    this.bot.on('callback_query', async (query) => {
+      const chatId = query.message.chat.id;
+      const data = query.data;
+
+      // Acknowledge the callback
+      await this.bot.answerCallbackQuery(query.id);
+
+      const [module, action] = data.split(':');
+
+      switch (module) {
+        case 'menu':
+          await this.handleMenuNavigation(chatId, action);
+          break;
+        case 'transcaribe':
+          await this.transcaribeHandler.handleCallback(chatId, action);
+          break;
+        case 'picoyplaca':
+          await this.picoyplacaHandler.handleCallback(chatId, action);
+          break;
+        case 'devops':
+          await this.devopsHandler.handleCallback(chatId, action);
+          break;
+      }
+    });
+  }
+
+  private async handleMenuNavigation(chatId: number, action: string) {
+    switch (action) {
+      case 'main':
+        await this.showMainMenu(chatId);
+        break;
+      case 'transcaribe':
+        await this.transcaribeHandler.showMenu(chatId);
+        break;
+      case 'picoyplaca':
+        await this.picoyplacaHandler.showMenu(chatId);
+        break;
+      case 'devops':
+        await this.devopsHandler.showMenu(chatId);
+        break;
+    }
   }
 
   private async setupListeners() {
     this.bot.onText(/\/start/, async (msg: TelegramBot.Message) => {
-      await this.bot.sendMessage(msg.chat.id, 'Hello, I am a bot!');
+      await this.showMainMenu(msg.chat.id);
+    });
+
+    this.bot.onText(/\/menu/, async (msg: TelegramBot.Message) => {
+      await this.showMainMenu(msg.chat.id);
     });
 
     this.transcaribeListeners();
@@ -36,6 +106,10 @@ export class TelegramService {
 
     this.bot.onText(/\/testconnection/, async (msg: TelegramBot.Message) => {
       await this.devopsHandler.testConnectionHandler(msg);
+    });
+
+    this.bot.onText(/\/addsubdomain/, async (msg: TelegramBot.Message) => {
+      await this.devopsHandler.addSubdomainHandler(msg);
     });
   }
 
