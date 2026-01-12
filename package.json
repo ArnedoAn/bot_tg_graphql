@@ -30,11 +30,12 @@
     "@prisma/client": "^6.19.0",
     "axios": "^1.6.2",
     "cheerio": "^1.0.0-rc.12",
+    "morgan": "^1.10.0",
+    "node-ssh": "^13.2.1",
     "node-telegram-bot-api": "^0.66.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "ssh2": "^1.17.0",
-    "morgan": "^1.10.0"
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

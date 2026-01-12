@@ -34,10 +34,16 @@ services:
       SSH_PORT: 22
       SSH_USERNAME: username_here
       SSH_HOST: 172.17.0.1
-      SSH_PRIVATE_KEY: RSA PRIVATE KEY HERE
+      SSH_PRIVATE_KEY_PATH: /root/.ssh/id_rsa
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     command: >
       sh -c "npx prisma migrate deploy && node dist/main"
 

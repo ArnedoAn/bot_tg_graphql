@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: 'postgres:16-alpine'
+    container_name: bot_tg_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: botuser
+      POSTGRES_PASSWORD: botpassword
+      POSTGRES_DB: bot_tg_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - 'postgres_data:/var/lib/postgresql/data'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U botuser -d bot_tg_db'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  app:
+    image: 'registry.toothless.codes/telegram-bot:latest'
+    pull_policy: always
+    container_name: bot_tg_app
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: "sh -c \"npx prisma migrate deploy && node dist/main\"\n"
+volumes:
+  postgres_data: null

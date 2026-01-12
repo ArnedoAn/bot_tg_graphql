@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client, ClientChannel, ConnectConfig } from 'ssh2';
+import { NodeSSH } from 'node-ssh';
 
 export interface SSHConfig {
   host: string;
-  port?: number;
+  port: number;
   username: string;
   password?: string;
-  privateKey?: Buffer | string;
+  privateKeyPath?: string;
 }
 
 export interface ScriptExecutionResult {
@@ -22,14 +22,16 @@ export class DevopsService {
   private readonly logger = new Logger(DevopsService.name);
   private readonly sshConfig: SSHConfig;
   private readonly DNS_UPDATE_COMMAND: string;
+  private ssh: NodeSSH;
 
   constructor(private readonly configService: ConfigService) {
+    this.ssh = new NodeSSH();
     this.sshConfig = {
       host: this.configService.get<string>('SSH_HOST', 'localhost'),
       port: this.configService.get<number>('SSH_PORT', 22),
       username: this.configService.get<string>('SSH_USERNAME', 'andres'),
       password: this.configService.get<string>('SSH_PASSWORD'),
-      privateKey: this.configService.get<string>('SSH_PRIVATE_KEY'),
+      privateKeyPath: this.configService.get<string>('SSH_PRIVATE_KEY_PATH'),
     };
 
     // Get DNS update command from env or use default path
@@ -42,8 +44,6 @@ export class DevopsService {
 
   /**
    * Execute a Python script on the Docker host via SSH
-   * @param scriptPath - Path to the Python script on the remote server
-   * @param args - Arguments to pass to the Python script
    * @returns Promise with execution result
    */
   async executeDNSUpdate(): Promise<ScriptExecutionResult> {
@@ -63,56 +63,52 @@ export class DevopsService {
   }
 
   /**
+   * Establish SSH connection using node-ssh
+   * @private
+   */
+  private async connect(): Promise<void> {
+    const connectionConfig: any = {
+      host: this.sshConfig.host,
+      port: this.sshConfig.port,
+      username: this.sshConfig.username,
+    };
+
+    // Prefer private key file path over password
+    if (this.sshConfig.privateKeyPath) {
+      connectionConfig.privateKeyPath = this.sshConfig.privateKeyPath;
+    } else if (this.sshConfig.password) {
+      connectionConfig.password = this.sshConfig.password;
+    }
+
+    await this.ssh.connect(connectionConfig);
+    this.logger.log('SSH connection established');
+  }
+
+  /**
    * Execute a custom command on the Docker host via SSH
    * @param command - Command to execute
    * @returns Promise with execution result
    */
   async executeSSHCommand(command: string): Promise<ScriptExecutionResult> {
-    return new Promise((resolve, reject) => {
-      const conn = new Client();
-      let stdout = '';
-      let stderr = '';
+    try {
+      await this.connect();
 
-      conn
-        .on('ready', () => {
-          this.logger.log('SSH connection established');
+      const result = await this.ssh.execCommand(command);
 
-          conn.exec(command, (err, stream: ClientChannel) => {
-            if (err) {
-              conn.end();
-              return reject(err);
-            }
+      this.logger.log(`Command finished with exit code: ${result.code}`);
 
-            stream
-              .on('close', (code: number, signal: string) => {
-                this.logger.log(
-                  `Command finished with exit code: ${code}, signal: ${signal}`,
-                );
-                conn.end();
-
-                resolve({
-                  success: code === 0,
-                  stdout: stdout.trim(),
-                  stderr: stderr.trim(),
-                  exitCode: code,
-                });
-              })
-              .on('data', (data: Buffer) => {
-                stdout += data.toString();
-                this.logger.debug(`STDOUT: ${data.toString()}`);
-              })
-              .stderr.on('data', (data: Buffer) => {
-                stderr += data.toString();
-                this.logger.warn(`STDERR: ${data.toString()}`);
-              });
-          });
-        })
-        .on('error', (err) => {
-          this.logger.error(`SSH connection error: ${err.message}`);
-          reject(err);
-        })
-        .connect(this.buildSSHConfig());
-    });
+      return {
+        success: result.code === 0,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim(),
+        exitCode: result.code ?? -1,
+      };
+    } catch (error) {
+      this.logger.error(`SSH command error: ${error.message}`);
+      throw error;
+    } finally {
+      this.ssh.dispose();
+    }
   }
 
   /**
@@ -127,26 +123,5 @@ export class DevopsService {
       this.logger.error(`Connection test failed: ${error.message}`);
       return false;
     }
-  }
-
-  /**
-   * Build SSH configuration object
-   * @private
-   */
-  private buildSSHConfig(): ConnectConfig {
-    const config: ConnectConfig = {
-      host: this.sshConfig.host,
-      port: this.sshConfig.port,
-      username: this.sshConfig.username,
-    };
-
-    // Prefer private key authentication over password
-    if (this.sshConfig.privateKey) {
-      config.privateKey = this.sshConfig.privateKey;
-    } else if (this.sshConfig.password) {
-      config.password = this.sshConfig.password;
-    }
-
-    return config;
   }
 }
