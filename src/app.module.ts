@@ -8,6 +8,7 @@ import { PicoyplacaModule } from './picoyplaca/picoyplaca.module';
 import { SharedModule } from './shared/shared.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { DevopsModule } from './devops/devops.module';
+import { FinanceModule } from './finance/finance.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DevopsModule } from './devops/devops.module';
     SharedModule,
     RemindersModule,
     DevopsModule,
+    FinanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

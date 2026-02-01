@@ -4,6 +4,7 @@ import { BotService } from '../shared/instances/bot.service';
 import { PicoyplacaHandler } from '../picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from '../transcaribe/handlers/transcaribe.handler';
 import { DevopsHandler } from '../devops/handlers/devops.handler';
+import { FinanceHandler } from '../finance/handlers/finance.handler';
 
 @Injectable()
 export class TelegramService {
@@ -14,6 +15,7 @@ export class TelegramService {
     private readonly picoyplacaHandler: PicoyplacaHandler,
     private readonly transcaribeHandler: TranscaribeHandler,
     private readonly devopsHandler: DevopsHandler,
+    private readonly financeHandler: FinanceHandler,
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
@@ -24,6 +26,7 @@ export class TelegramService {
     return [
       [{ text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' }],
       [{ text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' }],
+      [{ text: '💰 Finance Analyzer', callback_data: 'menu:finance' }],
       [{ text: '🔧 DevOps', callback_data: 'menu:devops' }],
     ];
   }
@@ -49,7 +52,8 @@ export class TelegramService {
       // Acknowledge the callback
       await this.bot.answerCallbackQuery(query.id);
 
-      const [module, action] = data.split(':');
+      const [module, ...rest] = data.split(':');
+      const action = rest.join(':'); // Rejoin in case action contains ':'
 
       switch (module) {
         case 'menu':
@@ -63,6 +67,9 @@ export class TelegramService {
           break;
         case 'devops':
           await this.devopsHandler.handleCallback(chatId, action);
+          break;
+        case 'finance':
+          await this.financeHandler.handleCallback(chatId, action, query.message.message_id);
           break;
       }
     });
@@ -82,6 +89,9 @@ export class TelegramService {
       case 'devops':
         await this.devopsHandler.showMenu(chatId);
         break;
+      case 'finance':
+        await this.financeHandler.showMenu(chatId);
+        break;
     }
   }
 
@@ -97,6 +107,17 @@ export class TelegramService {
     this.transcaribeListeners();
     this.picoYPlacaListeners();
     this.devopsListeners();
+    this.financeListeners();
+  }
+
+  private async financeListeners() {
+    this.bot.onText(/\/analyze/, async (msg: TelegramBot.Message) => {
+      await this.financeHandler.batchProcessHandler(msg);
+    });
+
+    this.bot.onText(/\/finance/, async (msg: TelegramBot.Message) => {
+      await this.financeHandler.showMenu(msg.chat.id);
+    });
   }
 
   private async devopsListeners() {
