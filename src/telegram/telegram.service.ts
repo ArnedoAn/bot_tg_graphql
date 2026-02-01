@@ -5,7 +5,6 @@ import { PicoyplacaHandler } from '../picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from '../transcaribe/handlers/transcaribe.handler';
 import { DevopsHandler } from '../devops/handlers/devops.handler';
 import { FinanceHandler } from '../finance/handlers/finance.handler';
-
 @Injectable()
 export class TelegramService {
   private readonly bot: TelegramBot;
