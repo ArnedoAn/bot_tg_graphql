@@ -37,6 +37,9 @@ export class FinanceHandler {
       ],
       [
         { text: '🔐 Estado Gmail', callback_data: 'finance:gmail_status' },
+        { text: '🔗 Reconectar Gmail', callback_data: 'finance:gmail_reconnect' },
+      ],
+      [
         { text: '🏥 Health Check', callback_data: 'finance:health' },
       ],
       [
@@ -114,6 +117,9 @@ export class FinanceHandler {
         return true;
       case 'gmail_status':
         await this.showGmailStatus(chatId, messageId);
+        return true;
+      case 'gmail_reconnect':
+        await this.showGmailReconnect(chatId, messageId);
         return true;
       case 'health':
         await this.showHealthCheck(chatId, messageId);
@@ -435,6 +441,49 @@ export class FinanceHandler {
     }
 
     const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
+    await this.editOrSend(chatId, messageId, text, keyboard);
+  }
+
+  /**
+   * Show Gmail reconnect with auth URL
+   */
+  private async showGmailReconnect(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
+    const loadingText = '💰 *Finance Analyzer*\n\n⏳ Obteniendo URL de autenticación...';
+
+    if (messageId) {
+      await this.bot.editMessageText(loadingText, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown',
+      });
+    }
+
+    const result = await this.financeService.getGmailAuthUrl();
+
+    let text: string;
+    let keyboard: InlineKeyboardButton[][];
+
+    if (result.success) {
+      const data = result.result;
+      text =
+        `💰 *Finance Analyzer*\n\n` +
+        `🔗 *Reconectar Gmail*\n\n` +
+        `Para volver a autenticar Gmail, haz clic en el botón de abajo:\n\n` +
+        `⚠️ _Este enlace expira en pocos minutos_`;
+
+      keyboard = [
+        [{ text: '🔐 Autenticar Gmail', url: data.authorization_url }],
+        [{ text: '🔄 Verificar Estado', callback_data: 'finance:gmail_status' }],
+        [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ];
+    } else {
+      text = `💰 *Finance Analyzer*\n\n❌ Error: ${result.result}`;
+      keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
+    }
+
     await this.editOrSend(chatId, messageId, text, keyboard);
   }
 

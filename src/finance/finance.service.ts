@@ -123,6 +123,23 @@ export class FinanceService {
   }
 
   /**
+   * Get Gmail OAuth authorization URL for re-authentication
+   */
+  async getGmailAuthUrl(): Promise<Result> {
+    try {
+      const url = `${this.apiBaseUrl}/api/v1/auth/url`;
+      const response = await this.httpService.get(url).toPromise();
+      return { success: true, result: response.data };
+    } catch (error) {
+      this.logger.error(`Get auth URL failed: ${error.message}`);
+      return {
+        success: false,
+        result: error.response?.data?.detail || error.message,
+      };
+    }
+  }
+
+  /**
    * Check Firefly III connection status
    */
   async getFireflyStatus(): Promise<Result> {
