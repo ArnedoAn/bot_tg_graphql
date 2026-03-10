@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BotService } from '../../shared/instances/bot.service';
 import TelegramBot from 'node-telegram-bot-api';
 import { DevopsService } from '../devops.service';
@@ -7,12 +8,25 @@ import { DevopsService } from '../devops.service';
 export class DevopsHandler {
   private readonly bot: TelegramBot;
   private readonly errorMessage = 'Ha ocurrido un error inesperado';
+  private readonly adminId: string;
+  private readonly unauthorizedMessage =
+    '🔒 No tienes permisos para acceder al módulo de DevOps.';
 
   constructor(
     private readonly devopsService: DevopsService,
     private readonly botInstance: BotService,
+    private readonly configService: ConfigService,
   ) {
     this.bot = this.botInstance.getBot();
+    this.adminId = this.configService.get<string>('ADMIN_ID');
+  }
+
+  private isAdmin(chatId: number): boolean {
+    return String(chatId) === this.adminId;
+  }
+
+  private async denyAccess(chatId: number): Promise<void> {
+    await this.botInstance.sendMessageToUser(chatId, this.unauthorizedMessage);
   }
 
   getMenuOptions(): TelegramBot.InlineKeyboardButton[][] {
@@ -27,6 +41,8 @@ export class DevopsHandler {
   }
 
   async showMenu(chatId: number) {
+    if (!this.isAdmin(chatId)) return this.denyAccess(chatId);
+
     await this.botInstance.sendMessageToUser(
       chatId,
       '🔧 *DevOps Menu*\n\nSelecciona una opción:',
@@ -40,6 +56,8 @@ export class DevopsHandler {
   }
 
   async handleCallback(chatId: number, action: string) {
+    if (!this.isAdmin(chatId)) return this.denyAccess(chatId);
+
     switch (action) {
       case 'dns_update':
         await this.dnsUpdateAction(chatId);
@@ -256,22 +274,27 @@ export class DevopsHandler {
 
   // Legacy handlers for direct commands
   async dnsUpdateHandler(msg: TelegramBot.Message) {
+    if (!this.isAdmin(msg.chat.id)) return this.denyAccess(msg.chat.id);
     await this.dnsUpdateAction(msg.chat.id);
   }
 
   async testConnectionHandler(msg: TelegramBot.Message) {
+    if (!this.isAdmin(msg.chat.id)) return this.denyAccess(msg.chat.id);
     await this.testConnectionAction(msg.chat.id);
   }
 
   async addSubdomainHandler(msg: TelegramBot.Message) {
+    if (!this.isAdmin(msg.chat.id)) return this.denyAccess(msg.chat.id);
     await this.addSubdomainAction(msg.chat.id);
   }
 
   async listSubdomainsHandler(msg: TelegramBot.Message) {
+    if (!this.isAdmin(msg.chat.id)) return this.denyAccess(msg.chat.id);
     await this.listSubdomainsAction(msg.chat.id);
   }
 
   async deleteSubdomainHandler(msg: TelegramBot.Message) {
+    if (!this.isAdmin(msg.chat.id)) return this.denyAccess(msg.chat.id);
     await this.deleteSubdomainAction(msg.chat.id);
   }
 }
