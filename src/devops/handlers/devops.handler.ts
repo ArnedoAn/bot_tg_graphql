@@ -35,6 +35,8 @@ export class DevopsHandler {
       [{ text: '📋 Listar Subdominios', callback_data: 'devops:list_subdomains' }],
       [{ text: '➕ Agregar Subdominio', callback_data: 'devops:add_subdomain' }],
       [{ text: '🗑️ Eliminar Subdominio', callback_data: 'devops:delete_subdomain' }],
+      [{ text: '📡 Listar Forwardings (Caddy)', callback_data: 'devops:caddy_list' }],
+      [{ text: '🌐 Agregar Forwarding (Caddy)', callback_data: 'devops:caddy_add' }],
       [{ text: '🔌 Test Conexión SSH', callback_data: 'devops:test_connection' }],
       [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
     ];
@@ -73,6 +75,12 @@ export class DevopsHandler {
         break;
       case 'delete_subdomain':
         await this.deleteSubdomainAction(chatId);
+        break;
+      case 'caddy_list':
+        await this.caddyListAction(chatId);
+        break;
+      case 'caddy_add':
+        await this.caddyAddAction(chatId);
         break;
       case 'test_connection':
         await this.testConnectionAction(chatId);
@@ -264,6 +272,110 @@ export class DevopsHandler {
       }
 
       await this.botInstance.sendMessageToUser(chatId, responseMessage);
+    } catch (err) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        `❌ ${err.message || this.errorMessage}`,
+      );
+    }
+  }
+
+  private async caddyListAction(chatId: number) {
+    try {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        '📡 Obteniendo forwardings de Caddy...',
+      );
+
+      const result = await this.devopsService.listCaddyForwardings();
+
+      let responseMessage = '';
+      if (result.success) {
+        responseMessage = `✅ *Forwardings activos en Caddy:*\n\n`;
+        responseMessage += result.stdout
+          ? `\`\`\`\n${result.stdout}\n\`\`\``
+          : '_No se encontraron forwardings_';
+      } else {
+        responseMessage = `❌ Error al listar forwardings\n\n`;
+        if (result.stderr) responseMessage += `⚠️ Error:\n${result.stderr}`;
+      }
+
+      await this.botInstance.sendMessageToUser(chatId, responseMessage, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🌐 Agregar Forwarding', callback_data: 'devops:caddy_add' }],
+            [{ text: '⬅️ Volver al menú DevOps', callback_data: 'menu:devops' }],
+          ],
+        },
+      });
+    } catch (err) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        `❌ ${err.message || this.errorMessage}`,
+      );
+    }
+  }
+
+  private async caddyAddAction(chatId: number) {
+    try {
+      const domainMsg = await this.botInstance.sendMessageToUser(
+        chatId,
+        '🌐 *Nuevo forwarding en Caddy*\n\nIngresa el dominio o subdominio:\n\n_Ejemplo: api.tudominio.com_',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { force_reply: true },
+        },
+      );
+      const domain = await this.botInstance.getOnReplyMessageResponse(chatId, domainMsg.message_id);
+
+      const portMsg = await this.botInstance.sendMessageToUser(
+        chatId,
+        '🔌 Ingresa el puerto local al que deseas hacer forwarding:\n\n_Ejemplo: 3000_',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { force_reply: true },
+        },
+      );
+      const port = await this.botInstance.getOnReplyMessageResponse(chatId, portMsg.message_id);
+
+      const descMsg = await this.botInstance.sendMessageToUser(
+        chatId,
+        '📝 Ingresa una descripción para este forwarding:\n\n_Se insertará como comentario antes del bloque en el Caddyfile_',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { force_reply: true },
+        },
+      );
+      const description = await this.botInstance.getOnReplyMessageResponse(
+        chatId,
+        descMsg.message_id,
+      );
+
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        `🔄 Agregando forwarding *${domain}* → \`:${port}\`...`,
+        { parse_mode: 'Markdown' },
+      );
+
+      const result = await this.devopsService.addCaddyForwarding(domain, port, description);
+
+      let responseMessage = '';
+      if (result.success) {
+        responseMessage = `✅ Forwarding agregado exitosamente\n\n`;
+        responseMessage += `🌐 *Dominio:* \`${domain}\`\n`;
+        responseMessage += `🔌 *Puerto:* \`${port}\`\n`;
+        responseMessage += `📝 *Descripción:* ${description}\n\n`;
+        if (result.stdout) responseMessage += `📋 ${result.stdout}`;
+      } else {
+        responseMessage = `❌ Error al agregar forwarding\n\n`;
+        if (result.stderr) responseMessage += `⚠️ Error:\n${result.stderr}`;
+        if (result.stdout) responseMessage += `\n${result.stdout}`;
+      }
+
+      await this.botInstance.sendMessageToUser(chatId, responseMessage, {
+        parse_mode: 'Markdown',
+      });
     } catch (err) {
       await this.botInstance.sendMessageToUser(
         chatId,

@@ -22,6 +22,7 @@ export class DevopsService {
   private readonly logger = new Logger(DevopsService.name);
   private readonly sshConfig: SSHConfig;
   private readonly DNS_SCRIPT_PATH: string;
+  private readonly CADDY_SCRIPT_PATH: string;
   private ssh: NodeSSH;
 
   constructor(private readonly configService: ConfigService) {
@@ -38,6 +39,11 @@ export class DevopsService {
     this.DNS_SCRIPT_PATH = this.configService.get<string>(
       'DNS_UPDATE_SCRIPT_PATH',
       '/home/andres/dns-update/dns.py',
+    );
+
+    this.CADDY_SCRIPT_PATH = this.configService.get<string>(
+      'CADDY_SCRIPT_PATH',
+      '/home/andres/caddy-manager/caddy-manager.sh',
     );
   }
 
@@ -191,6 +197,54 @@ export class DevopsService {
       return result;
     } catch (error) {
       this.logger.error(`DNS subdomain delete failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * List all Caddy reverse proxy forwardings
+   * @returns Promise with execution result containing parsed forwarding entries
+   */
+  async listCaddyForwardings(): Promise<ScriptExecutionResult> {
+    try {
+      this.logger.log('Listing Caddy forwardings...');
+      const result = await this.executeSSHCommand(`bash ${this.CADDY_SCRIPT_PATH} --list`);
+      this.logger.log('Caddy forwardings list completed.');
+      return result;
+    } catch (error) {
+      this.logger.error(`Caddy list failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Add a new Caddy reverse proxy forwarding
+   * @param domain - The domain to expose (e.g. api.example.com)
+   * @param port - The local port to forward to
+   * @param description - Optional description/comment added before the config block
+   * @returns Promise with execution result
+   */
+  async addCaddyForwarding(
+    domain: string,
+    port: string,
+    description: string = '',
+  ): Promise<ScriptExecutionResult> {
+    try {
+      const sanitizedDomain = domain.trim().toLowerCase();
+      const sanitizedPort = port.trim().replace(/[^0-9]/g, '');
+      const sanitizedDesc = description.trim().replace(/'/g, '');
+
+      if (!sanitizedDomain) throw new Error('Invalid domain');
+      if (!sanitizedPort) throw new Error('Invalid port');
+
+      this.logger.log(`Adding Caddy forwarding: ${sanitizedDomain} -> :${sanitizedPort}`);
+
+      const command = `bash ${this.CADDY_SCRIPT_PATH} --add --domain '${sanitizedDomain}' --port '${sanitizedPort}' --description '${sanitizedDesc}'`;
+      const result = await this.executeSSHCommand(command);
+      this.logger.log(`Caddy forwarding add completed for: ${sanitizedDomain}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`Caddy forwarding add failed: ${error.message}`);
       throw error;
     }
   }
