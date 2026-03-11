@@ -1,40 +1,52 @@
 services:
   postgres:
-    image: 'postgres:16-alpine'
+    image: postgres:16-alpine
     container_name: bot_tg_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: botuser
-      POSTGRES_PASSWORD: botpassword
-      POSTGRES_DB: bot_tg_db
+      POSTGRES_USER: ${POSTGRES_USER:-botuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-botpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-bot_tg_db}
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
-      - 'postgres_data:/var/lib/postgresql/data'
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        - CMD-SHELL
-        - 'pg_isready -U botuser -d bot_tg_db'
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-botuser} -d ${POSTGRES_DB:-bot_tg_db}']
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   app:
-    image: 'registry.toothless.codes/bot-telegram-personal:latest'
+    image: registry.toothless.codes/bot-telegram-personal:latest
     pull_policy: always
     container_name: bot_tg_app
     restart: unless-stopped
     network_mode: host
+    env_file: .env
     volumes:
-      - /root/.ssh/id_rsa_bot:/root/.ssh/id_rsa:ro
+      - /home/andres/.ssh/id_rsa_bot:/root/.ssh/id_rsa:ro
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    command: "sh -c \"npx prisma migrate deploy && node dist/main\"\n"
+    command: sh -c "npx prisma migrate deploy && node dist/main"
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+
 volumes:
-  postgres_data: null
+  postgres_data:
