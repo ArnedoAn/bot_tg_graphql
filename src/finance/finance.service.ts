@@ -23,6 +23,24 @@ export interface BatchProcessingResponse {
   results?: any[];
 }
 
+export interface BatchProcessingJobEnqueueResponse {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  poll_url?: string;
+  message?: string;
+}
+
+export interface ProcessingJobStatusResponse {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  session_id?: string;
+  created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  result?: BatchProcessingResponse | null;
+  error_message?: string | null;
+}
+
 export interface AuthStatus {
   gmail_authenticated: boolean;
   email?: string;
@@ -111,7 +129,7 @@ export class FinanceService {
       const url = `${this.apiBaseUrl}/api/v1/processing/batch`;
       this.logUserRequest(userId, 'launchBatchProcessing', url);
       const response = await firstValueFrom(
-        this.httpService.post<BatchProcessingResponse>(
+        this.httpService.post<BatchProcessingJobEnqueueResponse>(
           url,
           requestBody,
           this.buildUserHeaders(userId),
@@ -121,6 +139,26 @@ export class FinanceService {
       return { success: true, result: response.data };
     } catch (error) {
       this.logger.error(`Batch processing failed: ${error.message}`);
+      return {
+        success: false,
+        result: error.response?.data?.detail || error.message,
+      };
+    }
+  }
+
+  /**
+   * Get async batch processing job status
+   */
+  async getProcessingJobStatus(userId: string, jobId: string): Promise<Result> {
+    try {
+      const url = `${this.apiBaseUrl}/api/v1/processing/jobs/${jobId}`;
+      this.logUserRequest(userId, 'getProcessingJobStatus', url);
+      const response = await firstValueFrom(
+        this.httpService.get<ProcessingJobStatusResponse>(url, this.buildUserHeaders(userId)),
+      );
+      return { success: true, result: response.data };
+    } catch (error) {
+      this.logger.error(`Get processing job status failed: ${error.message}`);
       return {
         success: false,
         result: error.response?.data?.detail || error.message,

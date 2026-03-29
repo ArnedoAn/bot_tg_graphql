@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import TelegramBot, { InlineKeyboardButton } from 'node-telegram-bot-api';
 import { BotService } from '../../shared/instances/bot.service';
-import { FinanceService, BatchProcessingResponse } from '../finance.service';
+import {
+  FinanceService,
+  BatchProcessingResponse,
+  BatchProcessingJobEnqueueResponse,
+  ProcessingJobStatusResponse,
+} from '../finance.service';
 
 @Injectable()
 export class FinanceHandler {
@@ -24,6 +29,10 @@ export class FinanceHandler {
 
   private getUserId(chatId: number): string {
     return chatId.toString();
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -364,7 +373,7 @@ export class FinanceHandler {
     dryRun: boolean,
   ): Promise<void> {
     const mode = dryRun ? '🔍 Modo Prueba' : '🚀 Modo Real';
-    const loadingText = `💰 *Finance Analyzer*\n\n${mode}\n\n⏳ Procesando emails desde ${afterDate}...`;
+    const loadingText = `💰 *Finance Analyzer*\n\n${mode}\n\n⏳ Encolando procesamiento desde ${afterDate}...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -383,39 +392,108 @@ export class FinanceHandler {
       dryRun,
     );
 
-    let text: string;
-    if (result.success) {
-      const data = result.result as BatchProcessingResponse;
-      text =
-        `💰 *Finance Analyzer*\n\n` +
-        `${mode}\n\n` +
-        `✅ *Procesamiento completado*\n\n` +
-        `📊 *Resultados:*\n` +
-        `• Total emails: ${data.total_emails}\n` +
-        `• Procesados: ${data.processed}\n` +
-        `• Creados: ${data.created}\n` +
-        `• Omitidos: ${data.skipped}\n` +
-        `• Fallidos: ${data.failed}\n` +
-        `• Tiempo: ${data.processing_time_ms}ms`;
-    } else {
-      text = `💰 *Finance Analyzer*\n\n❌ Error: ${result.result}`;
+    if (!result.success) {
+      const text = `💰 *Finance Analyzer*\n\n❌ Error al encolar job: ${result.result}`;
+      const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
+      await this.editOrSend(chatId, messageId, text, keyboard);
+      return;
     }
+
+    const enqueueData = result.result as BatchProcessingJobEnqueueResponse;
+    const jobId = enqueueData.job_id;
+    const pollEverySeconds = 3;
+    const queuedText =
+      `💰 *Finance Analyzer*\n\n` +
+      `${mode}\n\n` +
+      `🕒 *Job encolado*\n` +
+      `• Job ID: \`${jobId}\`\n` +
+      `• Estado inicial: ${enqueueData.status}\n\n` +
+      `Voy a monitorearlo y te aviso cuando termine.\n` +
+      `⏱️ Polling cada ${pollEverySeconds}s`;
 
     const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
+    await this.editOrSend(chatId, messageId, queuedText, keyboard);
 
-    if (messageId) {
-      await this.bot.editMessageText(text, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: keyboard },
-      });
-    } else {
-      await this.bot.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: keyboard },
-      });
+    void this.pollBatchJobAndNotify(chatId, jobId, mode);
+  }
+
+  private async pollBatchJobAndNotify(
+    chatId: number,
+    jobId: string,
+    modeLabel: string,
+  ): Promise<void> {
+    const maxAttempts = 120;
+    const intervalMs = 3000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await this.sleep(intervalMs);
+
+      const jobResult = await this.financeService.getProcessingJobStatus(
+        this.getUserId(chatId),
+        jobId,
+      );
+
+      if (!jobResult.success) {
+        if (attempt % 10 !== 0) continue;
+        await this.bot.sendMessage(
+          chatId,
+          `💰 *Finance Analyzer*\n\n⚠️ No pude consultar el estado del job \`${jobId}\`.\nIntento ${attempt}/${maxAttempts}.`,
+          { parse_mode: 'Markdown' },
+        );
+        continue;
+      }
+
+      const job = jobResult.result as ProcessingJobStatusResponse;
+      if (job.status === 'queued' || job.status === 'running') continue;
+
+      if (job.status === 'failed') {
+        await this.bot.sendMessage(
+          chatId,
+          `💰 *Finance Analyzer*\n\n${modeLabel}\n\n❌ *Job falló*\n• Job ID: \`${jobId}\`\n• Error: ${job.error_message || 'Sin detalle'}`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+            },
+          },
+        );
+        return;
+      }
+
+      if (job.status === 'completed') {
+        const data = (job.result || {}) as BatchProcessingResponse;
+        const text =
+          `💰 *Finance Analyzer*\n\n` +
+          `${modeLabel}\n\n` +
+          `✅ *Trabajo terminado*\n\n` +
+          `• Job ID: \`${jobId}\`\n` +
+          `• Total emails: ${data.total_emails ?? 0}\n` +
+          `• Procesados: ${data.processed ?? 0}\n` +
+          `• Creados: ${data.created ?? 0}\n` +
+          `• Omitidos: ${data.skipped ?? 0}\n` +
+          `• Fallidos: ${data.failed ?? 0}\n` +
+          `• Tiempo: ${data.processing_time_ms ?? 0}ms`;
+
+        await this.bot.sendMessage(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+          },
+        });
+        return;
+      }
     }
+
+    await this.bot.sendMessage(
+      chatId,
+      `💰 *Finance Analyzer*\n\n⏰ El job \`${jobId}\` sigue en progreso o no respondió a tiempo.\nPuedes intentar nuevamente desde el menú.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+        },
+      },
+    );
   }
 
   /**
