@@ -218,7 +218,7 @@ export class DevopsService {
   }
 
   /**
-   * Add a new Caddy reverse proxy forwarding
+   * Add a new Caddy reverse proxy forwarding with fallback proxies
    * @param domain - The domain to expose (e.g. api.example.com)
    * @param port - The local port to forward to
    * @param description - Optional description/comment added before the config block
@@ -239,7 +239,7 @@ export class DevopsService {
 
       this.logger.log(`Adding Caddy forwarding: ${sanitizedDomain} -> :${sanitizedPort}`);
 
-      const command = `bash ${this.CADDY_SCRIPT_PATH} --add --domain '${sanitizedDomain}' --port '${sanitizedPort}' --description '${sanitizedDesc}'`;
+      const command = `bash ${this.CADDY_SCRIPT_PATH} --add --domain '${sanitizedDomain}' --port '${sanitizedPort}' --description '${sanitizedDesc}' --fallback`;
       const result = await this.executeSSHCommand(command);
       this.logger.log(`Caddy forwarding add completed for: ${sanitizedDomain}`);
       return result;

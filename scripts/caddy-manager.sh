@@ -6,7 +6,7 @@ CADDYFILE="${CADDYFILE_PATH:-/etc/caddy/Caddyfile}"
 
 usage() {
   echo "Usage: $0 --list"
-  echo "       $0 --add --domain <domain> --port <port> --description <description>"
+  echo "       $0 --add --domain <domain> --port <port> --description <description> [--fallback]"
   exit 1
 }
 
@@ -66,6 +66,7 @@ add_forwarding() {
   local domain="$1"
   local port="$2"
   local description="$3"
+  local with_fallback="$4"
 
   if [ -z "$domain" ] || [ -z "$port" ]; then
     echo "ERROR: --domain and --port are required"
@@ -98,22 +99,49 @@ add_forwarding() {
   # Backup Caddyfile before modifying
   cp "$CADDYFILE" "${CADDYFILE}.bak"
 
-  # Append new forwarding block
-  if [ -n "$description" ]; then
-    cat >> "$CADDYFILE" <<EOF
+  # Build config block — with fallback imports when requested
+  if [ "$with_fallback" = "1" ]; then
+    if [ -n "$description" ]; then
+      cat >> "$CADDYFILE" <<EOF
+
+# ${description}
+${domain} {
+    import error_static_assets
+    reverse_proxy localhost:${port} {
+        import fallback_proxy_5xx
+    }
+    import fallback_connect_errors
+}
+EOF
+    else
+      cat >> "$CADDYFILE" <<EOF
+
+${domain} {
+    import error_static_assets
+    reverse_proxy localhost:${port} {
+        import fallback_proxy_5xx
+    }
+    import fallback_connect_errors
+}
+EOF
+    fi
+  else
+    if [ -n "$description" ]; then
+      cat >> "$CADDYFILE" <<EOF
 
 # ${description}
 ${domain} {
     reverse_proxy localhost:${port}
 }
 EOF
-  else
-    cat >> "$CADDYFILE" <<EOF
+    else
+      cat >> "$CADDYFILE" <<EOF
 
 ${domain} {
     reverse_proxy localhost:${port}
 }
 EOF
+    fi
   fi
 
   # Validate new config
@@ -159,15 +187,17 @@ case "$COMMAND" in
     DOMAIN=""
     PORT=""
     DESCRIPTION=""
+    FALLBACK="0"
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --domain)      DOMAIN="$2";      shift 2 ;;
         --port)        PORT="$2";        shift 2 ;;
         --description) DESCRIPTION="$2"; shift 2 ;;
+        --fallback)    FALLBACK="1";     shift ;;
         *) shift ;;
       esac
     done
-    add_forwarding "$DOMAIN" "$PORT" "$DESCRIPTION"
+    add_forwarding "$DOMAIN" "$PORT" "$DESCRIPTION" "$FALLBACK"
     ;;
   *)
     usage

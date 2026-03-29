@@ -164,11 +164,11 @@ export class TelegramService {
       await this.picoyplacaHandler.picoHandler(msg);
     });
 
-    this.bot.onText(/\/addCar/, async (msg: TelegramBot.Message) => {
+    this.bot.onText(/\/(addCar|addcar)/, async (msg: TelegramBot.Message) => {
       await this.picoyplacaHandler.addVehicleHandler(msg);
     });
 
-    this.bot.onText(/\/allCars/, async (msg: TelegramBot.Message) => {
+    this.bot.onText(/\/(allCars|allcars)/, async (msg: TelegramBot.Message) => {
       await this.picoyplacaHandler.getVehiclesHandler(msg);
     });
 

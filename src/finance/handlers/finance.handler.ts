@@ -22,6 +22,10 @@ export class FinanceHandler {
     this.bot = this.botInstance.getBot();
   }
 
+  private getUserId(chatId: number): string {
+    return chatId.toString();
+  }
+
   /**
    * Get menu options for Finance module
    */
@@ -38,6 +42,9 @@ export class FinanceHandler {
       [
         { text: '🔐 Estado Gmail', callback_data: 'finance:gmail_status' },
         { text: '🔗 Reconectar Gmail', callback_data: 'finance:gmail_reconnect' },
+      ],
+      [
+        { text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' },
       ],
       [
         { text: '🏥 Health Check', callback_data: 'finance:health' },
@@ -123,6 +130,9 @@ export class FinanceHandler {
         return true;
       case 'health':
         await this.showHealthCheck(chatId, messageId);
+        return true;
+      case 'firefly_token':
+        await this.setFireflyTokenAction(chatId, messageId);
         return true;
       case 'scheduler':
         await this.showSchedulerStatus(chatId, messageId);
@@ -367,6 +377,7 @@ export class FinanceHandler {
     }
 
     const result = await this.financeService.launchBatchProcessing(
+      this.getUserId(chatId),
       afterDate,
       200,
       dryRun,
@@ -424,7 +435,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getGmailAuthStatus();
+    const result = await this.financeService.getGmailAuthStatus(this.getUserId(chatId));
 
     let text: string;
     if (result.success) {
@@ -461,7 +472,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getGmailAuthUrl();
+    const result = await this.financeService.getGmailAuthUrl(this.getUserId(chatId));
 
     let text: string;
     let keyboard: InlineKeyboardButton[][];
@@ -505,9 +516,9 @@ export class FinanceHandler {
     }
 
     const [healthResult, fireflyResult, deepseekResult] = await Promise.all([
-      this.financeService.getHealthCheck(),
-      this.financeService.getFireflyStatus(),
-      this.financeService.getDeepSeekStatus(),
+      this.financeService.getHealthCheck(this.getUserId(chatId)),
+      this.financeService.getFireflyStatus(this.getUserId(chatId)),
+      this.financeService.getDeepSeekStatus(this.getUserId(chatId)),
     ]);
 
     let text = `💰 *Finance Analyzer*\n\n🏥 *Health Check*\n\n`;
@@ -563,7 +574,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getStatistics();
+    const result = await this.financeService.getStatistics(this.getUserId(chatId));
 
     let text = `💰 *Finance Analyzer*\n\n📊 *Estadísticas*\n\n`;
 
@@ -601,7 +612,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getAuditLogs(10);
+    const result = await this.financeService.getAuditLogs(this.getUserId(chatId), 10);
 
     let text = `💰 *Finance Analyzer*\n\n📜 *Últimos 10 logs*\n\n`;
 
@@ -645,7 +656,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getSchedulerStatus();
+    const result = await this.financeService.getSchedulerStatus(this.getUserId(chatId));
 
     let text = `💰 *Finance Analyzer*\n\n⏰ *Estado del Scheduler*\n\n`;
 
@@ -686,7 +697,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.retryFailed(50);
+    const result = await this.financeService.retryFailed(this.getUserId(chatId), 50);
 
     let text = `💰 *Finance Analyzer*\n\n🔄 *Reintentar Fallidos*\n\n`;
 
@@ -726,7 +737,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.getKnownSenders();
+    const result = await this.financeService.getKnownSenders(this.getUserId(chatId));
 
     let text = `💰 *Finance Analyzer*\n\n📧 *Senders Conocidos*\n\n`;
 
@@ -774,7 +785,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.learnSenders(100, 30);
+    const result = await this.financeService.learnSenders(this.getUserId(chatId), 100, 30);
 
     let text = `💰 *Finance Analyzer*\n\n🧠 *Aprender Senders*\n\n`;
 
@@ -819,7 +830,7 @@ export class FinanceHandler {
       });
     }
 
-    const result = await this.financeService.syncAll();
+    const result = await this.financeService.syncAll(this.getUserId(chatId));
 
     let text = `💰 *Finance Analyzer*\n\n🔄 *Sincronización Firefly*\n\n`;
 
@@ -838,6 +849,83 @@ export class FinanceHandler {
       [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
     ];
     await this.editOrSend(chatId, messageId, text, keyboard);
+  }
+
+  /**
+   * Ask user for Firefly token and send it to Finance API
+   */
+  private async setFireflyTokenAction(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
+    if (messageId) {
+      await this.bot.editMessageText(
+        '💰 *Finance Analyzer*\n\n🔑 Ingresa tu token de Firefly III (PAT):',
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver', callback_data: 'menu:finance' }]],
+          },
+        },
+      );
+    }
+
+    const promptMsg = await this.bot.sendMessage(
+      chatId,
+      '✍️ Responde a este mensaje con tu token de Firefly.\n\n⚠️ *No compartas este token con nadie.*',
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          force_reply: true,
+        },
+      },
+    );
+
+    const token = await this.botInstance.getOnReplyMessageResponse(chatId, promptMsg.message_id);
+
+    const normalizedToken = token?.trim();
+    if (!normalizedToken) {
+      await this.bot.sendMessage(
+        chatId,
+        '❌ Token vacío. Intenta de nuevo desde el menú de Finance.',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+          },
+        },
+      );
+      return;
+    }
+
+    const result = await this.financeService.setFireflyToken(
+      this.getUserId(chatId),
+      normalizedToken,
+    );
+
+    if (result.success) {
+      await this.bot.sendMessage(
+        chatId,
+        '✅ Token de Firefly registrado correctamente para tu usuario.',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+          },
+        },
+      );
+      return;
+    }
+
+    await this.bot.sendMessage(
+      chatId,
+      `❌ Error al registrar token de Firefly: ${result.result}`,
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
+        },
+      },
+    );
   }
 
   /**
