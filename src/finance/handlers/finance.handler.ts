@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import TelegramBot, { InlineKeyboardButton } from 'node-telegram-bot-api';
 import { BotService } from '../../shared/instances/bot.service';
+import { UserMenuModeService } from '../../shared/instances/user-menu-mode.service';
 import {
   FinanceService,
   BatchProcessingResponse,
@@ -23,8 +24,18 @@ export class FinanceHandler {
   constructor(
     private readonly financeService: FinanceService,
     private readonly botInstance: BotService,
+    private readonly userMenuMode: UserMenuModeService,
   ) {
     this.bot = this.botInstance.getBot();
+  }
+
+  private async isAdvanced(chatId: number): Promise<boolean> {
+    return this.userMenuMode.isAdvancedUser(chatId);
+  }
+
+  /** Título de sección según perfil */
+  private financeTitle(advanced: boolean): string {
+    return advanced ? '💰 *Finance Analyzer*' : '💰 *Finanzas*';
   }
 
   private getUserId(chatId: number): string {
@@ -36,9 +47,27 @@ export class FinanceHandler {
   }
 
   /**
-   * Get menu options for Finance module
+   * Menú usuario común: solo lo esencial, textos claros en español.
    */
-  getMenuOptions(): InlineKeyboardButton[][] {
+  private getSimpleMenuOptions(): InlineKeyboardButton[][] {
+    return [
+      [{ text: '📥 Procesar movimientos desde el correo', callback_data: 'finance:batch' }],
+      [
+        { text: '✉️ ¿Gmail conectado?', callback_data: 'finance:gmail_status' },
+        { text: '🔗 Conectar o renovar Gmail', callback_data: 'finance:gmail_reconnect' },
+      ],
+      [{ text: '🔑 Token de Firefly', callback_data: 'finance:firefly_token' }],
+      [{ text: '🔄 Sincronizar con Firefly', callback_data: 'finance:sync' }],
+      [{ text: '✅ Estado del servicio', callback_data: 'finance:health' }],
+      [{ text: '🆔 Mi código de usuario', callback_data: 'finance:show_user_id' }],
+      [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
+    ];
+  }
+
+  /**
+   * Menú avanzado: opciones técnicas y diagnóstico.
+   */
+  private getAdvancedMenuOptions(): InlineKeyboardButton[][] {
     return [
       [
         { text: '🚀 Procesar Transacciones', callback_data: 'finance:batch' },
@@ -52,12 +81,9 @@ export class FinanceHandler {
         { text: '🔐 Estado Gmail', callback_data: 'finance:gmail_status' },
         { text: '🔗 Reconectar Gmail', callback_data: 'finance:gmail_reconnect' },
       ],
-      [
-        { text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' },
-      ],
-      [
-        { text: '🏥 Health Check', callback_data: 'finance:health' },
-      ],
+      [{ text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' }],
+      [{ text: '🆔 Ver User ID (API)', callback_data: 'finance:show_user_id' }],
+      [{ text: '🏥 Health Check', callback_data: 'finance:health' }],
       [
         { text: '⏰ Scheduler', callback_data: 'finance:scheduler' },
         { text: '🔄 Reintentar Fallidos', callback_data: 'finance:retry' },
@@ -71,16 +97,28 @@ export class FinanceHandler {
     ];
   }
 
+  async getMenuOptions(
+    chatId: number,
+    advanced?: boolean,
+  ): Promise<InlineKeyboardButton[][]> {
+    const adv = advanced ?? (await this.isAdvanced(chatId));
+    return adv ? this.getAdvancedMenuOptions() : this.getSimpleMenuOptions();
+  }
+
   /**
    * Show finance menu
    */
   async showMenu(chatId: number, messageId?: number): Promise<void> {
-    const text = '💰 *Finance Analyzer*\n\nSelecciona una opción:';
+    const adv = await this.isAdvanced(chatId);
+    const intro = adv
+      ? 'Selecciona una opción:'
+      : 'Aquí puedes conectar Gmail y Firefly, revisar el estado del servicio y procesar tus movimientos desde el correo.';
+    const text = `${this.financeTitle(adv)}\n\n${intro}`;
 
     const options = {
       parse_mode: 'Markdown' as const,
       reply_markup: {
-        inline_keyboard: this.getMenuOptions(),
+        inline_keyboard: await this.getMenuOptions(chatId, adv),
       },
     };
 
@@ -115,6 +153,26 @@ export class FinanceHandler {
       return true;
     }
 
+    const advancedOnly = new Set([
+      'dryrun',
+      'stats',
+      'audit',
+      'scheduler',
+      'retry',
+      'senders',
+      'learn',
+    ]);
+    const adv = await this.isAdvanced(chatId);
+    if (!adv && advancedOnly.has(action)) {
+      const text =
+        `${this.financeTitle(adv)}\n\n` +
+        'Esta opción solo está en *menú avanzado*. Pulsa *Cambiar modo de menú* en el inicio y elige *Menú avanzado*.';
+      await this.editOrSend(chatId, messageId, text, [
+        [{ text: '🔙 Volver', callback_data: 'menu:finance' }],
+      ]);
+      return true;
+    }
+
     switch (action) {
       case 'menu':
         await this.showMenu(chatId, messageId);
@@ -142,6 +200,9 @@ export class FinanceHandler {
         return true;
       case 'firefly_token':
         await this.setFireflyTokenAction(chatId, messageId);
+        return true;
+      case 'show_user_id':
+        await this.showApiUserId(chatId, messageId);
         return true;
       case 'scheduler':
         await this.showSchedulerStatus(chatId, messageId);
@@ -275,12 +336,18 @@ export class FinanceHandler {
     messageId: number | undefined,
     dryRun: boolean,
   ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
     const state = this.userDateState.get(chatId);
     const year = state?.year || new Date().getFullYear();
     const month = state?.month || new Date().getMonth();
 
     const mode = dryRun ? '🔍 Modo Prueba' : '🚀 Modo Real';
-    const text = `💰 *Finance Analyzer*\n\n${mode}\n\n📅 Selecciona la fecha desde la cual procesar:`;
+    const dateHint = adv
+      ? '📅 Desde qué fecha quieres procesar correos:'
+      : '📅 Desde qué fecha quieres incluir movimientos de tus correos:';
+    const text = adv
+      ? `${this.financeTitle(adv)}\n\n${mode}\n\n${dateHint}`
+      : `${this.financeTitle(adv)}\n\n${dateHint}`;
 
     const options = {
       parse_mode: 'Markdown' as const,
@@ -344,7 +411,10 @@ export class FinanceHandler {
     messageId?: number,
   ): Promise<void> {
     const parts = action.replace('date_', '').split('_');
-    const dryRun = parts[parts.length - 1] === 'dry';
+    let dryRun = parts[parts.length - 1] === 'dry';
+    if (!(await this.isAdvanced(chatId))) {
+      dryRun = false;
+    }
     const dateParam = parts.slice(0, -1).join('_');
 
     let afterDate: string;
@@ -372,8 +442,11 @@ export class FinanceHandler {
     afterDate: string,
     dryRun: boolean,
   ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
     const mode = dryRun ? '🔍 Modo Prueba' : '🚀 Modo Real';
-    const loadingText = `💰 *Finance Analyzer*\n\n${mode}\n\n⏳ Encolando procesamiento desde ${afterDate}...`;
+    const loadingText = adv
+      ? `${this.financeTitle(adv)}\n\n${mode}\n\n⏳ Encolando procesamiento desde ${afterDate}...`
+      : `${this.financeTitle(adv)}\n\n⏳ Preparando el proceso desde *${afterDate}*...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -393,7 +466,9 @@ export class FinanceHandler {
     );
 
     if (!result.success) {
-      const text = `💰 *Finance Analyzer*\n\n❌ Error al encolar job: ${result.result}`;
+      const text = adv
+        ? `${this.financeTitle(adv)}\n\n❌ Error al encolar job: ${result.result}`
+        : `${this.financeTitle(adv)}\n\n❌ No se pudo iniciar el proceso. Intenta de nuevo o más tarde.\n\n_Detalle: ${result.result}_`;
       const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
       await this.editOrSend(chatId, messageId, text, keyboard);
       return;
@@ -402,14 +477,17 @@ export class FinanceHandler {
     const enqueueData = result.result as BatchProcessingJobEnqueueResponse;
     const jobId = enqueueData.job_id;
     const pollEverySeconds = 3;
-    const queuedText =
-      `💰 *Finance Analyzer*\n\n` +
-      `${mode}\n\n` +
-      `🕒 *Job encolado*\n` +
-      `• Job ID: \`${jobId}\`\n` +
-      `• Estado inicial: ${enqueueData.status}\n\n` +
-      `Voy a monitorearlo y te aviso cuando termine.\n` +
-      `⏱️ Polling cada ${pollEverySeconds}s`;
+    const queuedText = adv
+      ? `${this.financeTitle(adv)}\n\n` +
+        `${mode}\n\n` +
+        `🕒 *Job encolado*\n` +
+        `• Job ID: \`${jobId}\`\n` +
+        `• Estado inicial: ${enqueueData.status}\n\n` +
+        `Voy a monitorearlo y te aviso cuando termine.\n` +
+        `⏱️ Polling cada ${pollEverySeconds}s`
+      : `${this.financeTitle(adv)}\n\n` +
+        `✅ Tu proceso ya está en cola. Te avisaré aquí cuando termine.\n\n` +
+        `_Si tarda mucho, no cierres Telegram._`;
 
     const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
     await this.editOrSend(chatId, messageId, queuedText, keyboard);
@@ -422,6 +500,7 @@ export class FinanceHandler {
     jobId: string,
     modeLabel: string,
   ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
     const maxAttempts = 120;
     const intervalMs = 3000;
 
@@ -435,11 +514,10 @@ export class FinanceHandler {
 
       if (!jobResult.success) {
         if (attempt % 10 !== 0) continue;
-        await this.bot.sendMessage(
-          chatId,
-          `💰 *Finance Analyzer*\n\n⚠️ No pude consultar el estado del job \`${jobId}\`.\nIntento ${attempt}/${maxAttempts}.`,
-          { parse_mode: 'Markdown' },
-        );
+        const pollErr = adv
+          ? `${this.financeTitle(adv)}\n\n⚠️ No pude consultar el estado del job \`${jobId}\`.\nIntento ${attempt}/${maxAttempts}.`
+          : `${this.financeTitle(adv)}\n\n⚠️ No pude comprobar el avance del proceso. Sigo intentando… (${attempt}/${maxAttempts})`;
+        await this.bot.sendMessage(chatId, pollErr, { parse_mode: 'Markdown' });
         continue;
       }
 
@@ -447,32 +525,38 @@ export class FinanceHandler {
       if (job.status === 'queued' || job.status === 'running') continue;
 
       if (job.status === 'failed') {
-        await this.bot.sendMessage(
-          chatId,
-          `💰 *Finance Analyzer*\n\n${modeLabel}\n\n❌ *Job falló*\n• Job ID: \`${jobId}\`\n• Error: ${job.error_message || 'Sin detalle'}`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
-            },
+        const failText = adv
+          ? `${this.financeTitle(adv)}\n\n${modeLabel}\n\n❌ *Job falló*\n• Job ID: \`${jobId}\`\n• Error: ${job.error_message || 'Sin detalle'}`
+          : `${this.financeTitle(adv)}\n\n❌ *No se pudo completar el proceso*\n\n${job.error_message || 'Error desconocido. Intenta de nuevo o revisa Gmail y Firefly.'}`;
+        await this.bot.sendMessage(chatId, failText, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
           },
-        );
+        });
         return;
       }
 
       if (job.status === 'completed') {
         const data = (job.result || {}) as BatchProcessingResponse;
-        const text =
-          `💰 *Finance Analyzer*\n\n` +
-          `${modeLabel}\n\n` +
-          `✅ *Trabajo terminado*\n\n` +
-          `• Job ID: \`${jobId}\`\n` +
-          `• Total emails: ${data.total_emails ?? 0}\n` +
-          `• Procesados: ${data.processed ?? 0}\n` +
-          `• Creados: ${data.created ?? 0}\n` +
-          `• Omitidos: ${data.skipped ?? 0}\n` +
-          `• Fallidos: ${data.failed ?? 0}\n` +
-          `• Tiempo: ${data.processing_time_ms ?? 0}ms`;
+        const text = adv
+          ? `${this.financeTitle(adv)}\n\n` +
+            `${modeLabel}\n\n` +
+            `✅ *Trabajo terminado*\n\n` +
+            `• Job ID: \`${jobId}\`\n` +
+            `• Total emails: ${data.total_emails ?? 0}\n` +
+            `• Procesados: ${data.processed ?? 0}\n` +
+            `• Creados: ${data.created ?? 0}\n` +
+            `• Omitidos: ${data.skipped ?? 0}\n` +
+            `• Fallidos: ${data.failed ?? 0}\n` +
+            `• Tiempo: ${data.processing_time_ms ?? 0}ms`
+          : `${this.financeTitle(adv)}\n\n` +
+            `✅ *Listo*\n\n` +
+            `• Correos revisados: ${data.total_emails ?? 0}\n` +
+            `• Movimientos registrados (nuevos): ${data.created ?? 0}\n` +
+            `• Sin cambios / ya estaban: ${data.skipped ?? 0}\n` +
+            `• Con error: ${data.failed ?? 0}\n\n` +
+            `_Tiempo aproximado: ${data.processing_time_ms ?? 0} ms_`;
 
         await this.bot.sendMessage(chatId, text, {
           parse_mode: 'Markdown',
@@ -484,16 +568,40 @@ export class FinanceHandler {
       }
     }
 
-    await this.bot.sendMessage(
-      chatId,
-      `💰 *Finance Analyzer*\n\n⏰ El job \`${jobId}\` sigue en progreso o no respondió a tiempo.\nPuedes intentar nuevamente desde el menú.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
-        },
+    const timeoutText = adv
+      ? `${this.financeTitle(adv)}\n\n⏰ El job \`${jobId}\` sigue en progreso o no respondió a tiempo.\nPuedes intentar nuevamente desde el menú.`
+      : `${this.financeTitle(adv)}\n\n⏰ El proceso sigue tardando o no hubo respuesta a tiempo. Prueba otra vez desde *Finanzas* más tarde.`;
+    await this.bot.sendMessage(chatId, timeoutText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
       },
-    );
+    });
+  }
+
+  /**
+   * Show user id sent to Finance API (header X-User-Id)
+   */
+  private async showApiUserId(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
+    const userId = this.getUserId(chatId);
+    const text = adv
+      ? `${this.financeTitle(adv)}\n\n` +
+        `🆔 *User ID para la API*\n\n` +
+        `Este valor se envía en el header *X-User-Id* en todas las peticiones al Finance API:\n\n` +
+        `\`${userId}\`\n\n` +
+        `_Equivale a tu Telegram chat id (string)._`
+      : `${this.financeTitle(adv)}\n\n` +
+        `🆔 *Tu código de usuario*\n\n` +
+        `Si el soporte te lo pide, envía este número:\n\n` +
+        `\`${userId}\`\n\n` +
+        `_Es tu identificador en Telegram (solo para este bot)._`;
+
+    const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
+    await this.editOrSend(chatId, messageId, text, keyboard);
   }
 
   /**
@@ -503,7 +611,8 @@ export class FinanceHandler {
     chatId: number,
     messageId?: number,
   ): Promise<void> {
-    const loadingText = '💰 *Finance Analyzer*\n\n⏳ Verificando estado de Gmail...';
+    const adv = await this.isAdvanced(chatId);
+    const loadingText = `${this.financeTitle(adv)}\n\n⏳ Comprobando Gmail...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -518,15 +627,27 @@ export class FinanceHandler {
     let text: string;
     if (result.success) {
       const data = result.result;
-      const status = data.gmail_authenticated ? '✅ Autenticado' : '❌ No autenticado';
-      text =
-        `💰 *Finance Analyzer*\n\n` +
-        `🔐 *Estado de Gmail*\n\n` +
-        `• Estado: ${status}\n` +
-        `• Email: ${data.email || 'N/A'}\n` +
-        `• Mensaje: ${data.message}`;
+      if (adv) {
+        const status = data.gmail_authenticated ? '✅ Autenticado' : '❌ No autenticado';
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          `🔐 *Estado de Gmail*\n\n` +
+          `• Estado: ${status}\n` +
+          `• Email: ${data.email || 'N/A'}\n` +
+          `• Mensaje: ${data.message}`;
+      } else {
+        const ok = data.gmail_authenticated;
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          `✉️ *Gmail*\n\n` +
+          (ok
+            ? `✅ *Conectado*\nCuenta: ${data.email || '—'}\n\n${data.message || ''}`
+            : `❌ *Aún no conectado*\nUsa *Conectar o renovar Gmail* para iniciar sesión.\n\n${data.message || ''}`);
+      }
     } else {
-      text = `💰 *Finance Analyzer*\n\n❌ Error: ${result.result}`;
+      text = adv
+        ? `${this.financeTitle(adv)}\n\n❌ Error: ${result.result}`
+        : `${this.financeTitle(adv)}\n\n❌ No se pudo comprobar Gmail. Intenta más tarde.\n\n_Detalle: ${result.result}_`;
     }
 
     const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
@@ -540,7 +661,8 @@ export class FinanceHandler {
     chatId: number,
     messageId?: number,
   ): Promise<void> {
-    const loadingText = '💰 *Finance Analyzer*\n\n⏳ Obteniendo URL de autenticación...';
+    const adv = await this.isAdvanced(chatId);
+    const loadingText = `${this.financeTitle(adv)}\n\n⏳ Preparando enlace seguro...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -557,19 +679,30 @@ export class FinanceHandler {
 
     if (result.success) {
       const data = result.result;
-      text =
-        `💰 *Finance Analyzer*\n\n` +
-        `🔗 *Reconectar Gmail*\n\n` +
-        `Para volver a autenticar Gmail, haz clic en el botón de abajo:\n\n` +
-        `⚠️ _Este enlace expira en pocos minutos_`;
+      text = adv
+        ? `${this.financeTitle(adv)}\n\n` +
+          `🔗 *Reconectar Gmail*\n\n` +
+          `Para volver a autenticar Gmail, haz clic en el botón de abajo:\n\n` +
+          `⚠️ _Este enlace expira en pocos minutos_`
+        : `${this.financeTitle(adv)}\n\n` +
+          `🔗 *Conectar Gmail*\n\n` +
+          `Pulsa el botón, inicia sesión con Google y vuelve aquí.\n\n` +
+          `⚠️ _El enlace caduca en pocos minutos._`;
 
       keyboard = [
-        [{ text: '🔐 Autenticar Gmail', url: data.authorization_url }],
-        [{ text: '🔄 Verificar Estado', callback_data: 'finance:gmail_status' }],
+        [
+          {
+            text: adv ? '🔐 Autenticar Gmail' : '🔐 Abrir Google',
+            url: data.authorization_url,
+          },
+        ],
+        [{ text: '🔄 Comprobar de nuevo', callback_data: 'finance:gmail_status' }],
         [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
       ];
     } else {
-      text = `💰 *Finance Analyzer*\n\n❌ Error: ${result.result}`;
+      text = adv
+        ? `${this.financeTitle(adv)}\n\n❌ Error: ${result.result}`
+        : `${this.financeTitle(adv)}\n\n❌ No se pudo abrir el enlace. Intenta de nuevo.\n\n_Detalle: ${result.result}_`;
       keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
     }
 
@@ -583,7 +716,8 @@ export class FinanceHandler {
     chatId: number,
     messageId?: number,
   ): Promise<void> {
-    const loadingText = '💰 *Finance Analyzer*\n\n⏳ Ejecutando health check...';
+    const adv = await this.isAdvanced(chatId);
+    const loadingText = `${this.financeTitle(adv)}\n\n⏳ Revisando que todo funcione...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -599,34 +733,47 @@ export class FinanceHandler {
       this.financeService.getDeepSeekStatus(this.getUserId(chatId)),
     ]);
 
-    let text = `💰 *Finance Analyzer*\n\n🏥 *Health Check*\n\n`;
+    let text: string;
 
-    if (healthResult.success) {
-      const h = healthResult.result;
-      text += `*General:*\n`;
-      text += `• Estado: ${h.status === 'healthy' ? '✅' : '❌'} ${h.status}\n`;
-      text += `• Versión: ${h.version}\n`;
-      text += `• Ambiente: ${h.environment}\n\n`;
+    if (adv) {
+      text = `${this.financeTitle(adv)}\n\n🏥 *Health Check*\n\n`;
 
-      if (h.services) {
-        text += `*Servicios:*\n`;
-        for (const [service, status] of Object.entries(h.services)) {
-          text += `• ${service}: ${status ? '✅' : '❌'}\n`;
+      if (healthResult.success) {
+        const h = healthResult.result;
+        text += `*General:*\n`;
+        text += `• Estado: ${h.status === 'healthy' ? '✅' : '❌'} ${h.status}\n`;
+        text += `• Versión: ${h.version}\n`;
+        text += `• Ambiente: ${h.environment}\n\n`;
+
+        if (h.services) {
+          text += `*Servicios:*\n`;
+          for (const [service, status] of Object.entries(h.services)) {
+            text += `• ${service}: ${status ? '✅' : '❌'}\n`;
+          }
         }
+      } else {
+        text += `❌ API no disponible\n`;
       }
+
+      text += `\n*Firefly III:* `;
+      text += fireflyResult.success
+        ? `✅ ${fireflyResult.result?.connected ? 'Conectado' : 'Disponible'}`
+        : `❌ Error`;
+
+      text += `\n*DeepSeek AI:* `;
+      text += deepseekResult.success
+        ? `✅ ${deepseekResult.result?.connected ? 'Conectado' : 'Disponible'}`
+        : `❌ Error`;
     } else {
-      text += `❌ API no disponible\n`;
+      const apiOk = healthResult.success && healthResult.result?.status === 'healthy';
+      const fireflyOk = fireflyResult.success && fireflyResult.result?.connected;
+      text =
+        `${this.financeTitle(adv)}\n\n` +
+        `✅ *Estado del servicio*\n\n` +
+        `• Servicio principal: ${apiOk ? '✅ Todo bien' : '⚠️ Hay un problema'}\n` +
+        `• Conexión con Firefly: ${fireflyOk ? '✅ Lista' : '⚠️ Revisa o sincroniza'}\n\n` +
+        `_Si algo falla, revisa Gmail y el token de Firefly._`;
     }
-
-    text += `\n*Firefly III:* `;
-    text += fireflyResult.success
-      ? `✅ ${fireflyResult.result?.connected ? 'Conectado' : 'Disponible'}`
-      : `❌ Error`;
-
-    text += `\n*DeepSeek AI:* `;
-    text += deepseekResult.success
-      ? `✅ ${deepseekResult.result?.connected ? 'Conectado' : 'Disponible'}`
-      : `❌ Error`;
 
     const keyboard = [
       [{ text: '🔄 Actualizar', callback_data: 'finance:health' }],
@@ -898,7 +1045,8 @@ export class FinanceHandler {
     chatId: number,
     messageId?: number,
   ): Promise<void> {
-    const loadingText = '💰 *Finance Analyzer*\n\n⏳ Sincronizando con Firefly III...';
+    const adv = await this.isAdvanced(chatId);
+    const loadingText = `${this.financeTitle(adv)}\n\n⏳ Sincronizando con Firefly...`;
 
     if (messageId) {
       await this.bot.editMessageText(loadingText, {
@@ -910,16 +1058,28 @@ export class FinanceHandler {
 
     const result = await this.financeService.syncAll(this.getUserId(chatId));
 
-    let text = `💰 *Finance Analyzer*\n\n🔄 *Sincronización Firefly*\n\n`;
+    let text: string;
 
     if (result.success) {
       const data = result.result;
-      text += `✅ *Sincronización completada*\n\n`;
-      if (data.accounts !== undefined) text += `• Cuentas: ${data.accounts}\n`;
-      if (data.categories !== undefined) text += `• Categorías: ${data.categories}\n`;
-      if (data.message) text += `\n${data.message}`;
+      if (adv) {
+        text = `${this.financeTitle(adv)}\n\n🔄 *Sincronización Firefly*\n\n`;
+        text += `✅ *Sincronización completada*\n\n`;
+        if (data.accounts !== undefined) text += `• Cuentas: ${data.accounts}\n`;
+        if (data.categories !== undefined) text += `• Categorías: ${data.categories}\n`;
+        if (data.message) text += `\n${data.message}`;
+      } else {
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          `✅ *Datos actualizados en Firefly*\n\n` +
+          (data.accounts !== undefined ? `• Cuentas sincronizadas: ${data.accounts}\n` : '') +
+          (data.categories !== undefined ? `• Categorías: ${data.categories}\n` : '') +
+          (data.message ? `\n${data.message}` : '');
+      }
     } else {
-      text += `❌ Error: ${result.result}`;
+      text = adv
+        ? `${this.financeTitle(adv)}\n\n🔄 *Sincronización Firefly*\n\n❌ Error: ${result.result}`
+        : `${this.financeTitle(adv)}\n\n❌ No se pudo sincronizar con Firefly.\n\n_Detalle: ${result.result}_`;
     }
 
     const keyboard = [
@@ -936,9 +1096,12 @@ export class FinanceHandler {
     chatId: number,
     messageId?: number,
   ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
     if (messageId) {
       await this.bot.editMessageText(
-        '💰 *Finance Analyzer*\n\n🔑 Ingresa tu token de Firefly III (PAT):',
+        adv
+          ? `${this.financeTitle(adv)}\n\n🔑 Ingresa tu token de Firefly III (PAT):`
+          : `${this.financeTitle(adv)}\n\n🔑 *Token de acceso de Firefly*\n\nCópialo desde Firefly (configuración → token personal).`,
         {
           chat_id: chatId,
           message_id: messageId,
@@ -952,7 +1115,9 @@ export class FinanceHandler {
 
     const promptMsg = await this.bot.sendMessage(
       chatId,
-      '✍️ Responde a este mensaje con tu token de Firefly.\n\n⚠️ *No compartas este token con nadie.*',
+      adv
+        ? '✍️ Responde a este mensaje con tu token de Firefly.\n\n⚠️ *No compartas este token con nadie.*'
+        : '✍️ Responde a *este mensaje* pegando el token de Firefly.\n\n⚠️ *No lo compartas con nadie.*',
       {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -967,8 +1132,9 @@ export class FinanceHandler {
     if (!normalizedToken) {
       await this.bot.sendMessage(
         chatId,
-        '❌ Token vacío. Intenta de nuevo desde el menú de Finance.',
+        '❌ No escribiste nada. Vuelve a *Finanzas* e inténtalo de nuevo.',
         {
+          parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
           },
@@ -985,8 +1151,11 @@ export class FinanceHandler {
     if (result.success) {
       await this.bot.sendMessage(
         chatId,
-        '✅ Token de Firefly registrado correctamente para tu usuario.',
+        adv
+          ? '✅ Token de Firefly registrado correctamente para tu usuario.'
+          : '✅ *Listo.* Tu token de Firefly quedó guardado para este bot.',
         {
+          parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
           },
@@ -997,8 +1166,11 @@ export class FinanceHandler {
 
     await this.bot.sendMessage(
       chatId,
-      `❌ Error al registrar token de Firefly: ${result.result}`,
+      adv
+        ? `❌ Error al registrar token de Firefly: ${result.result}`
+        : `❌ No se pudo guardar el token.\n\n_Detalle: ${result.result}_`,
       {
+        parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
         },

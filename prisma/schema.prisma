@@ -30,3 +30,12 @@ model Reminder {
   date        DateTime
   userId      String
 }
+
+/// Preferencias por usuario de Telegram (chatId como string)
+model UserSettings {
+  userId   String @id @map("user_id")
+  /// "simple" | "advanced"
+  menuMode String @default("simple") @map("menu_mode")
+
+  @@map("user_settings")
+}

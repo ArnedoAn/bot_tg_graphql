@@ -18,6 +18,7 @@ export class BotService {
       await this.bot.setMyCommands([
         { command: 'start', description: 'Inicia el bot y muestra el menu principal' },
         { command: 'menu', description: 'Abre el menu principal' },
+        { command: 'modo', description: 'Elegir menu simple o avanzado' },
         { command: 'finance', description: 'Abre el modulo de finanzas' },
         { command: 'analyze', description: 'Procesa transacciones de emails' },
         { command: 'init', description: 'Registra tu tarjeta Transcaribe' },

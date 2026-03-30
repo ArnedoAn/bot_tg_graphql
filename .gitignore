@@ -36,3 +36,7 @@ lerna-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.sisyphus/AGENTS.md
+.sisyphus/src_shared_AGENTS.md
+src/shared/AGENTS.md
+scripts/deploy-local.sh
