@@ -23,6 +23,14 @@ export class FinanceHandler {
   private readonly bot: TelegramBot;
   private readonly errorMessage = 'Ha ocurrido un error inesperado';
 
+  /** Instancia Firefly del usuario y UI Finance (onboarding). */
+  private readonly onboardingUrls = {
+    fireflyHome: 'https://finance-fly.toothless.codes/',
+    fireflyProfile: 'https://finance-fly.toothless.codes/profile',
+    financeWeb: 'https://finance.toothless.codes/',
+    financeSetup: 'https://finance.toothless.codes/settings/setup',
+  } as const;
+
   // Store user state for date selection
   private userDateState: Map<
     number,
@@ -80,6 +88,9 @@ export class FinanceHandler {
     rows.push([
       { text: '⚙️ Operaciones (correo, Gmail, token…)', callback_data: 'finance:ops_menu' },
     ]);
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK)) {
+      rows.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);
+    }
     rows.push([{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }]);
     return rows;
   }
@@ -157,6 +168,10 @@ export class FinanceHandler {
       rows.push([{ text: '🔄 Sincronizar Firefly', callback_data: 'finance:sync' }]);
     }
 
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK)) {
+      rows.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);
+    }
+
     rows.push([{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }]);
     return rows;
   }
@@ -188,6 +203,9 @@ export class FinanceHandler {
     }
     if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_USER_ID)) {
       rows.push([{ text: '🆔 Mi código de usuario', callback_data: 'finance:show_user_id' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK)) {
+      rows.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);
     }
     rows.push([{ text: '🔙 Volver a Finanzas', callback_data: 'finance:menu' }]);
     return rows;
@@ -413,23 +431,9 @@ export class FinanceHandler {
         }
         break;
       case 'wiz_dl_apk': {
-        const asset = await this.botAssets.getFinanceApk();
-        if (!asset) {
-          const adv = await this.isAdvanced(chatId);
-          await this.editOrSend(
-            chatId,
-            messageId,
-            `${this.financeTitle(adv)}\n\n⚠️ El administrador aún no ha subido una APK. Puedes omitir este paso.`,
-            this.wizardNavKeyboard('apk'),
-          );
-          return;
-        }
-        await this.botInstance.sendDocumentByFileId(chatId, asset.fileId, {
-          caption:
-            '📱 *APK de Finanzas*\n\n' +
-            'Instálala y, si la app lo pide, pega tu *Telegram user ID*:\n' +
-            `\`${uid}\``,
-          parse_mode: 'Markdown',
+        await this.deliverFinanceApk(chatId, {
+          messageId,
+          missingApkKeyboard: this.wizardNavKeyboard('apk'),
         });
         break;
       }
@@ -445,6 +449,56 @@ export class FinanceHandler {
       default:
         await this.renderWizardStep(chatId, messageId, step);
     }
+  }
+
+  /**
+   * Envía la APK registrada por el admin, o avisa si no hay archivo.
+   */
+  private async deliverFinanceApk(
+    chatId: number,
+    opts?: { messageId?: number; missingApkKeyboard?: InlineKeyboardButton[][] },
+  ): Promise<void> {
+    if (!(await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK))) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        'La descarga de APK no está disponible.',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }]],
+          },
+        },
+      );
+      return;
+    }
+
+    const uid = this.getUserId(chatId);
+    const asset = await this.botAssets.getFinanceApk();
+    if (!asset) {
+      const adv = await this.isAdvanced(chatId);
+      const text =
+        `${this.financeTitle(adv)}\n\n` +
+        '⚠️ El administrador aún no ha subido una APK al bot. Vuelve a intentar más tarde.' +
+        (opts?.missingApkKeyboard ? '\n\n_Puedes omitir este paso del tutorial._' : '');
+      if (opts?.messageId !== undefined && opts.missingApkKeyboard) {
+        await this.editOrSend(chatId, opts.messageId, text, opts.missingApkKeyboard);
+      } else {
+        await this.botInstance.sendMessageToUser(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }]],
+          },
+        });
+      }
+      return;
+    }
+
+    await this.botInstance.sendDocumentByFileId(chatId, asset.fileId, {
+      caption:
+        '📱 *APK de Finanzas*\n\n' +
+        'Instálala y, si la app lo pide, pega tu *Telegram user ID*:\n' +
+        `\`${uid}\``,
+      parse_mode: 'Markdown',
+    });
   }
 
   private async renderWizardStep(
@@ -463,28 +517,43 @@ export class FinanceHandler {
       case 'start':
         text =
           `${this.financeTitle(adv)}\n\n🎓 *Configurar finanzas*\n\n` +
-          'Te guío en pocos pasos: cuenta en *Firefly*, token en el bot, *Gmail*, la *web* de Finanzas y, si quieres, la *app APK*.\n\n' +
+          'Te guío en pocos pasos: cuenta en *Firefly* (' +
+          this.onboardingUrls.fireflyHome +
+          '), token en el bot, *Gmail*, la *web* de Finanzas (' +
+          this.onboardingUrls.financeWeb +
+          ') y, si quieres, la *app APK*.\n\n' +
           'Puedes parar y seguir más tarde: guardamos tu último paso.';
         keyboard = this.wizardNavKeyboard('start', { showBack: false });
         break;
       case 'firefly_signup':
         text =
           `${this.financeTitle(adv)}\n\n` +
-          '📝 *Paso 1 — Firefly III*\n\n' +
-          '1. Crea tu espacio en Firefly III (web o propio).\n' +
-          '2. En Firefly, crea un *token personal* (PAT) desde preferencias / perfil.\n\n' +
-          '🔗 Documentación: https://docs.firefly-iii.org/\n\n' +
-          '_Todavía no pegues el token aquí si quieres seguir el orden del tutorial._';
-        keyboard = this.wizardNavKeyboard('firefly_signup');
+          '📝 *Paso 1 — Cuenta en Firefly*\n\n' +
+          '1. Entra a *tu instancia* y crea cuenta o inicia sesión:\n' +
+          this.onboardingUrls.fireflyHome +
+          '\n' +
+          '2. Luego abre *Perfil* para gestionar tu usuario y, más adelante, el *token personal* (PAT):\n' +
+          this.onboardingUrls.fireflyProfile +
+          '\n\n' +
+          '_En el siguiente paso pegarás el PAT en el bot. Si aún no lo creas, puedes hacerlo en Perfil → OAuth / tokens (según tu pantalla de Firefly)._';
+        keyboard = [
+          [{ text: '🏠 Abrir Firefly (inicio)', url: this.onboardingUrls.fireflyHome }],
+          [{ text: '👤 Perfil (cuenta y token)', url: this.onboardingUrls.fireflyProfile }],
+          ...this.wizardNavKeyboard('firefly_signup'),
+        ];
         break;
       case 'firefly_token':
         text =
           `${this.financeTitle(adv)}\n\n` +
           '🔑 *Paso 2 — Token en el bot*\n\n' +
+          'Genera o copia tu *token personal (PAT)* desde Firefly:\n' +
+          this.onboardingUrls.fireflyProfile +
+          '\n\n' +
           'Pulsa *Pegar token* y responde al mensaje que te envío. ' +
           'El mensaje con tu token se borrará al procesarlo cuando Telegram lo permita.\n\n' +
           'Si ya lo configuraste antes, usa *Verificar con la API*.';
         keyboard = [
+          [{ text: '🔑 Abrir Firefly → perfil / token', url: this.onboardingUrls.fireflyProfile }],
           [
             { text: '✍️ Pegar token', callback_data: 'finance:wiz_token' },
             { text: '✅ Verificar con la API', callback_data: 'finance:wiz_verify_firefly' },
@@ -516,11 +585,27 @@ export class FinanceHandler {
       case 'web_ui':
         text =
           `${this.financeTitle(adv)}\n\n` +
-          '🌐 *Paso 4 — Interfaz web*\n\n' +
-          'Abre la configuración y pega el *mismo* token de acceso personal en “personal access token”:\n\n' +
-          'https://finance.toothless.codes/settings/setup\n\n' +
+          '🌐 *Paso 4 — Interfaz web (Finance)*\n\n' +
+          '*Instalar como PWA (recomendado)*\n' +
+          'Así tendrás la app como un icono en el móvil, sin tienda.\n\n' +
+          '*Android (Chrome)*\n' +
+          '1. Abre la web en Chrome: ' +
+          this.onboardingUrls.financeWeb +
+          '\n' +
+          '2. Menú ⋮ → *Instalar aplicación* o *Añadir a la pantalla de inicio* (el nombre puede variar).\n' +
+          '3. Confirma; quedará un acceso directo como una app.\n\n' +
+          '*iPhone o iPad (Safari)*\n' +
+          '1. Abre el enlace en *Safari* (si hace falta, “Abrir en Safari” desde el menú del navegador).\n' +
+          '2. Pulsa *Compartir* .\n' +
+          '3. *Añadir a la pantalla de Inicio* → *Añadir*.\n\n' +
+          '*Pegar el mismo PAT en la web*\n' +
+          'En configuración, campo *personal access token*, usa el mismo token que en el bot:\n' +
+          this.onboardingUrls.financeSetup +
+          '\n\n' +
           'Cuando lo hayas hecho, pulsa *Ya lo configuré*.';
         keyboard = [
+          [{ text: '🌐 Abrir Finance (web)', url: this.onboardingUrls.financeWeb }],
+          [{ text: '⚙️ Configuración (pegar token)', url: this.onboardingUrls.financeSetup }],
           [{ text: '✅ Ya lo configuré', callback_data: 'finance:wiz_web_done' }],
           ...this.wizardNavKeyboard('web_ui'),
         ];
@@ -551,8 +636,11 @@ export class FinanceHandler {
           'Si cambias de móvil o token, vuelve al menú de Finanzas.';
         keyboard = [
           [{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }],
-          [{ text: '💰 Ir al menú Finanzas', callback_data: 'menu:finance' }],
         ];
+        if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK)) {
+          keyboard.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);
+        }
+        keyboard.push([{ text: '💰 Ir al menú Finanzas', callback_data: 'menu:finance' }]);
         break;
       default:
         text = `${this.financeTitle(adv)}\n\nTutorial — paso desconocido, volvemos al inicio.`;
@@ -639,6 +727,9 @@ export class FinanceHandler {
     switch (action) {
       case 'menu':
         await this.showMenu(chatId, messageId);
+        return true;
+      case 'get_apk':
+        await this.deliverFinanceApk(chatId, { messageId });
         return true;
       case 'batch':
         await this.initDateSelector(chatId, messageId, false);
@@ -1563,14 +1654,17 @@ export class FinanceHandler {
     if (messageId) {
       await this.bot.editMessageText(
         adv
-          ? `${this.financeTitle(adv)}\n\n🔑 Ingresa tu token de Firefly III (PAT):`
-          : `${this.financeTitle(adv)}\n\n🔑 *Token de acceso de Firefly*\n\nCópialo desde Firefly (configuración → token personal).`,
+          ? `${this.financeTitle(adv)}\n\n🔑 Ingresa tu token de Firefly III (PAT):\n\n_${this.onboardingUrls.fireflyProfile}_`
+          : `${this.financeTitle(adv)}\n\n🔑 *Token de acceso de Firefly*\n\nCópialo desde tu perfil:\n${this.onboardingUrls.fireflyProfile}`,
         {
           chat_id: chatId,
           message_id: messageId,
           parse_mode: 'Markdown',
           reply_markup: {
-            inline_keyboard: [[{ text: '🔙 Volver', callback_data: 'menu:finance' }]],
+            inline_keyboard: [
+              [{ text: '🔑 Abrir Firefly → perfil / token', url: this.onboardingUrls.fireflyProfile }],
+              [{ text: '🔙 Volver', callback_data: 'menu:finance' }],
+            ],
           },
         },
       );
@@ -1579,8 +1673,8 @@ export class FinanceHandler {
     const promptMsg = await this.bot.sendMessage(
       chatId,
       adv
-        ? '✍️ Responde a este mensaje con tu token de Firefly.\n\n⚠️ *No compartas este token con nadie.*'
-        : '✍️ Responde a *este mensaje* pegando el token de Firefly.\n\n⚠️ *No lo compartas con nadie.*',
+        ? `✍️ Responde a este mensaje con tu PAT.\n\nOrigen: ${this.onboardingUrls.fireflyProfile}\n\n⚠️ *No compartas este token con nadie.*`
+        : `✍️ Responde a *este mensaje* pegando el token.\n\nLo sacas de: ${this.onboardingUrls.fireflyProfile}\n\n⚠️ *No lo compartas con nadie.*`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
