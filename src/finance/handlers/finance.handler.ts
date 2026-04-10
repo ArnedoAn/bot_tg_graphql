@@ -8,6 +8,14 @@ import {
   BatchProcessingJobEnqueueResponse,
   ProcessingJobStatusResponse,
 } from '../finance.service';
+import { FeatureFlagsService } from '../../shared/prisma/feature-flags.service';
+import {
+  FinanceOnboardingService,
+  FinanceWizardStep,
+  FINANCE_WIZARD_STEPS,
+} from '../../shared/prisma/finance-onboarding.service';
+import { BotAssetService } from '../../shared/prisma/bot-asset.service';
+import { FEATURE_FLAGS } from '../../shared/constants/feature-flag-keys';
 
 @Injectable()
 export class FinanceHandler {
@@ -21,10 +29,16 @@ export class FinanceHandler {
     { year: number; month: number; dryRun: boolean }
   > = new Map();
 
+  /** Tras configurar token desde el asistente, volver al flujo del tutorial */
+  private readonly wizardAfterToken: Set<number> = new Set();
+
   constructor(
     private readonly financeService: FinanceService,
     private readonly botInstance: BotService,
     private readonly userMenuMode: UserMenuModeService,
+    private readonly featureFlags: FeatureFlagsService,
+    private readonly onboarding: FinanceOnboardingService,
+    private readonly botAssets: BotAssetService,
   ) {
     this.bot = this.botInstance.getBot();
   }
@@ -46,55 +60,137 @@ export class FinanceHandler {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Menú usuario común: solo lo esencial, textos claros en español.
-   */
-  private getSimpleMenuOptions(): InlineKeyboardButton[][] {
-    return [
-      [{ text: '📥 Procesar movimientos desde el correo', callback_data: 'finance:batch' }],
-      [
-        { text: '✉️ ¿Gmail conectado?', callback_data: 'finance:gmail_status' },
-        { text: '🔗 Conectar o renovar Gmail', callback_data: 'finance:gmail_reconnect' },
-      ],
-      [{ text: '🔑 Token de Firefly', callback_data: 'finance:firefly_token' }],
-      [{ text: '🔄 Sincronizar con Firefly', callback_data: 'finance:sync' }],
-      [{ text: '✅ Estado del servicio', callback_data: 'finance:health' }],
-      [{ text: '🆔 Mi código de usuario', callback_data: 'finance:show_user_id' }],
-      [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
-    ];
+  private async sectionOn(key: (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS]): Promise<boolean> {
+    return this.featureFlags.isEnabled(key);
   }
 
   /**
-   * Menú avanzado: opciones técnicas y diagnóstico.
+   * Menú usuario común: tutorial primero, operaciones aparte.
    */
-  private getAdvancedMenuOptions(): InlineKeyboardButton[][] {
-    return [
-      [
-        { text: '🚀 Procesar Transacciones', callback_data: 'finance:batch' },
-        { text: '🔍 Modo Prueba', callback_data: 'finance:dryrun' },
-      ],
-      [
-        { text: '📊 Estadísticas', callback_data: 'finance:stats' },
-        { text: '📜 Auditoría', callback_data: 'finance:audit' },
-      ],
-      [
+  private async buildSimpleMenuOptions(): Promise<InlineKeyboardButton[][]> {
+    const rows: InlineKeyboardButton[][] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL)) {
+      rows.push([
+        { text: '🎓 Configurar finanzas (tutorial)', callback_data: 'finance:wizard' },
+      ]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_REVIEW)) {
+      rows.push([{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }]);
+    }
+    rows.push([
+      { text: '⚙️ Operaciones (correo, Gmail, token…)', callback_data: 'finance:ops_menu' },
+    ]);
+    rows.push([{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }]);
+    return rows;
+  }
+
+  /**
+   * Menú avanzado: tutorial + operaciones técnicas filtradas por flags.
+   */
+  private async buildAdvancedMenuOptions(): Promise<InlineKeyboardButton[][]> {
+    const rows: InlineKeyboardButton[][] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL)) {
+      rows.push([
+        { text: '🎓 Tutorial / asistente', callback_data: 'finance:wizard' },
+      ]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_REVIEW)) {
+      rows.push([{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }]);
+    }
+
+    const batchRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_BATCH)) {
+      batchRow.push({ text: '🚀 Procesar Transacciones', callback_data: 'finance:batch' });
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_DRYRUN)) {
+      batchRow.push({ text: '🔍 Modo Prueba', callback_data: 'finance:dryrun' });
+    }
+    if (batchRow.length) rows.push(batchRow);
+
+    const statsRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_STATS)) {
+      statsRow.push({ text: '📊 Estadísticas', callback_data: 'finance:stats' });
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_AUDIT)) {
+      statsRow.push({ text: '📜 Auditoría', callback_data: 'finance:audit' });
+    }
+    if (statsRow.length) rows.push(statsRow);
+
+    const gmailRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_GMAIL)) {
+      gmailRow.push(
         { text: '🔐 Estado Gmail', callback_data: 'finance:gmail_status' },
         { text: '🔗 Reconectar Gmail', callback_data: 'finance:gmail_reconnect' },
-      ],
-      [{ text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' }],
-      [{ text: '🆔 Ver User ID (API)', callback_data: 'finance:show_user_id' }],
-      [{ text: '🏥 Health Check', callback_data: 'finance:health' }],
-      [
-        { text: '⏰ Scheduler', callback_data: 'finance:scheduler' },
-        { text: '🔄 Reintentar Fallidos', callback_data: 'finance:retry' },
-      ],
-      [
-        { text: '📧 Ver Senders', callback_data: 'finance:senders' },
-        { text: '🧠 Aprender Senders', callback_data: 'finance:learn' },
-      ],
-      [{ text: '🔄 Sincronizar Firefly', callback_data: 'finance:sync' }],
-      [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
-    ];
+      );
+    }
+    if (gmailRow.length) rows.push(gmailRow);
+
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)) {
+      rows.push([{ text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_USER_ID)) {
+      rows.push([{ text: '🆔 Ver User ID (API)', callback_data: 'finance:show_user_id' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_HEALTH)) {
+      rows.push([{ text: '🏥 Health Check', callback_data: 'finance:health' }]);
+    }
+
+    const schedRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_SCHEDULER)) {
+      schedRow.push({ text: '⏰ Scheduler', callback_data: 'finance:scheduler' });
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_RETRY)) {
+      schedRow.push({ text: '🔄 Reintentar Fallidos', callback_data: 'finance:retry' });
+    }
+    if (schedRow.length) rows.push(schedRow);
+
+    const sendersRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_SENDERS)) {
+      sendersRow.push({ text: '📧 Ver Senders', callback_data: 'finance:senders' });
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_LEARN)) {
+      sendersRow.push({ text: '🧠 Aprender Senders', callback_data: 'finance:learn' });
+    }
+    if (sendersRow.length) rows.push(sendersRow);
+
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_SYNC)) {
+      rows.push([{ text: '🔄 Sincronizar Firefly', callback_data: 'finance:sync' }]);
+    }
+
+    rows.push([{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }]);
+    return rows;
+  }
+
+  /** Submenú de operaciones para menú simple (mismas acciones que antes, filtradas). */
+  private async buildSimpleOperationsMenu(): Promise<InlineKeyboardButton[][]> {
+    const rows: InlineKeyboardButton[][] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_BATCH)) {
+      rows.push([
+        { text: '📥 Procesar movimientos desde el correo', callback_data: 'finance:batch' },
+      ]);
+    }
+    const gmailRow: InlineKeyboardButton[] = [];
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_GMAIL)) {
+      gmailRow.push(
+        { text: '✉️ ¿Gmail conectado?', callback_data: 'finance:gmail_status' },
+        { text: '🔗 Conectar o renovar Gmail', callback_data: 'finance:gmail_reconnect' },
+      );
+    }
+    if (gmailRow.length) rows.push(gmailRow);
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)) {
+      rows.push([{ text: '🔑 Token de Firefly', callback_data: 'finance:firefly_token' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_SYNC)) {
+      rows.push([{ text: '🔄 Sincronizar con Firefly', callback_data: 'finance:sync' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_HEALTH)) {
+      rows.push([{ text: '✅ Estado del servicio', callback_data: 'finance:health' }]);
+    }
+    if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_USER_ID)) {
+      rows.push([{ text: '🆔 Mi código de usuario', callback_data: 'finance:show_user_id' }]);
+    }
+    rows.push([{ text: '🔙 Volver a Finanzas', callback_data: 'finance:menu' }]);
+    return rows;
   }
 
   async getMenuOptions(
@@ -102,17 +198,28 @@ export class FinanceHandler {
     advanced?: boolean,
   ): Promise<InlineKeyboardButton[][]> {
     const adv = advanced ?? (await this.isAdvanced(chatId));
-    return adv ? this.getAdvancedMenuOptions() : this.getSimpleMenuOptions();
+    return adv ? this.buildAdvancedMenuOptions() : this.buildSimpleMenuOptions();
   }
 
   /**
    * Show finance menu
    */
   async showMenu(chatId: number, messageId?: number): Promise<void> {
+    if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+      const t = 'El módulo de finanzas no está disponible en este momento.';
+      if (messageId) {
+        await this.bot.editMessageText(t, { chat_id: chatId, message_id: messageId });
+      } else {
+        await this.bot.sendMessage(chatId, t);
+      }
+      return;
+    }
+
     const adv = await this.isAdvanced(chatId);
     const intro = adv
-      ? 'Selecciona una opción:'
-      : 'Aquí puedes conectar Gmail y Firefly, revisar el estado del servicio y procesar tus movimientos desde el correo.';
+      ? 'Selecciona una opción (tutorial, revisión o herramientas técnicas):'
+      : '🎓 *Primera vez?* Abre *Configurar finanzas (tutorial)*.\n\n' +
+        'Para procesar correos y acciones del día a día, entra en *Operaciones*.';
     const text = `${this.financeTitle(adv)}\n\n${intro}`;
 
     const options = {
@@ -133,6 +240,328 @@ export class FinanceHandler {
     }
   }
 
+  /** Entrada pública: comando /configurar_finanzas */
+  async openFinanceWizard(chatId: number, messageId?: number): Promise<void> {
+    if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        'El módulo de finanzas no está disponible.',
+      );
+      return;
+    }
+    if (!(await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL))) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        'El tutorial no está disponible. Usa el menú *Finanzas*.',
+        { parse_mode: 'Markdown' },
+      );
+      return;
+    }
+    const uid = this.getUserId(chatId);
+    const prog = await this.onboarding.getOrCreate(uid);
+    const step = (prog.currentStep as FinanceWizardStep) || 'start';
+    await this.renderWizardStep(chatId, messageId, step);
+  }
+
+  private wizardNavKeyboard(
+    step: FinanceWizardStep,
+    opts?: { showNext?: boolean; showBack?: boolean },
+  ): InlineKeyboardButton[][] {
+    const rows: InlineKeyboardButton[][] = [];
+    const showNext = opts?.showNext !== false;
+    const showBack = opts?.showBack !== false;
+    const nav: InlineKeyboardButton[] = [];
+    if (showBack) {
+      nav.push({ text: '⬅️ Paso anterior', callback_data: 'finance:wiz_back' });
+    }
+    if (showNext) {
+      nav.push({ text: 'Siguiente paso ➡️', callback_data: 'finance:wiz_next' });
+    }
+    if (nav.length) rows.push(nav);
+    rows.push([{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }]);
+    return rows;
+  }
+
+  private async showSimpleOperationsMenu(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
+    const text =
+      `${this.financeTitle(adv)}\n\n` +
+      '⚙️ *Operaciones*\n\n' +
+      'Aquí están las acciones habituales (procesar correos, Gmail, token, etc.). ' +
+      'Para configurar por primera vez, usa el *tutorial*.';
+    const keyboard = await this.buildSimpleOperationsMenu();
+    await this.editOrSend(chatId, messageId, text, keyboard);
+  }
+
+  private async showConfigReview(chatId: number, messageId?: number): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
+    const uid = this.getUserId(chatId);
+    const [gmailR, fireflyR, prog] = await Promise.all([
+      this.financeService.getGmailAuthStatus(uid),
+      this.financeService.getFireflyStatus(uid),
+      this.onboarding.getOrCreate(uid),
+    ]);
+
+    const gmailOk =
+      gmailR.success && !!(gmailR.result as { gmail_authenticated?: boolean })?.gmail_authenticated;
+    const fireflyOk =
+      fireflyR.success && !!(fireflyR.result as { connected?: boolean })?.connected;
+
+    const lines = [
+      `${this.financeTitle(adv)}\n\n📋 *Revisar configuración*\n`,
+      `• Gmail conectado: ${gmailOk ? '✅ Sí' : '❌ No'}`,
+      `• Token Firefly reconocido por la API: ${fireflyOk ? '✅ Sí' : '❌ No'}`,
+      `• Interfaz web configurada (según tu confirmación): ${prog.webUiDone ? '✅ Indicaste que sí' : '⏳ Pendiente'}`,
+      `• App APK (según tu confirmación): ${prog.apkManualDone ? '✅ Indicaste que sí' : '⏳ Opcional / pendiente'}`,
+      '',
+      '_Estados de Gmail y Firefly se comprueban en vivo; el resto es lo que marcaste en el tutorial._',
+    ];
+
+    const keyboard = [
+      [{ text: '🔄 Verificar de nuevo', callback_data: 'finance:review_setup' }],
+      [{ text: '🎓 Volver al tutorial', callback_data: 'finance:wizard' }],
+      [{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }],
+    ];
+    await this.editOrSend(chatId, messageId, lines.join('\n'), keyboard);
+  }
+
+  private async handleWizardAction(
+    chatId: number,
+    action: string,
+    messageId?: number,
+  ): Promise<void> {
+    const uid = this.getUserId(chatId);
+    const prog = await this.onboarding.getOrCreate(uid);
+    let step = (prog.currentStep as FinanceWizardStep) || 'start';
+    const idx = FINANCE_WIZARD_STEPS.indexOf(step);
+
+    switch (action) {
+      case 'wiz_next': {
+        const next = this.onboarding.stepAt(idx + 1);
+        await this.onboarding.setCurrentStep(uid, next);
+        await this.renderWizardStep(chatId, messageId, next);
+        break;
+      }
+      case 'wiz_back': {
+        const prev = this.onboarding.stepAt(idx - 1);
+        await this.onboarding.setCurrentStep(uid, prev);
+        await this.renderWizardStep(chatId, messageId, prev);
+        break;
+      }
+      case 'wiz_token':
+        this.wizardAfterToken.add(chatId);
+        await this.setFireflyTokenAction(chatId, messageId);
+        break;
+      case 'wiz_verify_firefly': {
+        const r = await this.financeService.getFireflyStatus(uid);
+        const ok = r.success && !!(r.result as { connected?: boolean })?.connected;
+        if (ok) {
+          await this.onboarding.markFireflyTokenDone(uid);
+          await this.renderWizardStep(chatId, messageId, 'gmail');
+        } else {
+          const text =
+            `${this.financeTitle(await this.isAdvanced(chatId))}\n\n` +
+            '❌ La API aún no reconoce un token válido. Usa *Pegar token en el bot* o revisa Firefly.';
+          await this.editOrSend(chatId, messageId, text, [
+            [
+              { text: '🔑 Pegar token', callback_data: 'finance:wiz_token' },
+              { text: '🔄 Verificar otra vez', callback_data: 'finance:wiz_verify_firefly' },
+            ],
+            ...this.wizardNavKeyboard('firefly_token', { showNext: false }),
+          ]);
+        }
+        break;
+      }
+      case 'wiz_verify_gmail': {
+        const r = await this.financeService.getGmailAuthStatus(uid);
+        const ok =
+          r.success && !!(r.result as { gmail_authenticated?: boolean })?.gmail_authenticated;
+        if (ok) {
+          await this.onboarding.markGmailDone(uid);
+          await this.renderWizardStep(chatId, messageId, 'web_ui');
+        } else {
+          const adv = await this.isAdvanced(chatId);
+          const text =
+            `${this.financeTitle(adv)}\n\n` +
+            '❌ Gmail aún no aparece conectado. Abre el enlace OAuth, inicia sesión y vuelve a verificar.';
+          const urlR = await this.financeService.getGmailAuthUrl(uid);
+          const kb: InlineKeyboardButton[][] = [];
+          if (urlR.success && (urlR.result as { authorization_url?: string })?.authorization_url) {
+            kb.push([
+              {
+                text: '🔐 Abrir Google',
+                url: (urlR.result as { authorization_url: string }).authorization_url,
+              },
+            ]);
+          }
+          kb.push([{ text: '🔄 Verificar de nuevo', callback_data: 'finance:wiz_verify_gmail' }]);
+          kb.push(...this.wizardNavKeyboard('gmail', { showNext: false }));
+          await this.editOrSend(chatId, messageId, text, kb);
+        }
+        break;
+      }
+      case 'wiz_web_done':
+        await this.onboarding.markWebUiDone(uid);
+        if (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK)) {
+          await this.renderWizardStep(chatId, messageId, 'apk');
+        } else {
+          await this.onboarding.skipApkToComplete(uid);
+          await this.renderWizardStep(chatId, messageId, 'complete');
+        }
+        break;
+      case 'wiz_dl_apk': {
+        const asset = await this.botAssets.getFinanceApk();
+        if (!asset) {
+          const adv = await this.isAdvanced(chatId);
+          await this.editOrSend(
+            chatId,
+            messageId,
+            `${this.financeTitle(adv)}\n\n⚠️ El administrador aún no ha subido una APK. Puedes omitir este paso.`,
+            this.wizardNavKeyboard('apk'),
+          );
+          return;
+        }
+        await this.botInstance.sendDocumentByFileId(chatId, asset.fileId, {
+          caption:
+            '📱 *APK de Finanzas*\n\n' +
+            'Instálala y, si la app lo pide, pega tu *Telegram user ID*:\n' +
+            `\`${uid}\``,
+          parse_mode: 'Markdown',
+        });
+        break;
+      }
+      case 'wiz_apk_skip':
+        await this.onboarding.skipApkToComplete(uid);
+        await this.renderWizardStep(chatId, messageId, 'complete');
+        break;
+      case 'wiz_apk_done':
+        await this.onboarding.markApkManualDone(uid);
+        await this.onboarding.markComplete(uid);
+        await this.renderWizardStep(chatId, messageId, 'complete');
+        break;
+      default:
+        await this.renderWizardStep(chatId, messageId, step);
+    }
+  }
+
+  private async renderWizardStep(
+    chatId: number,
+    messageId: number | undefined,
+    step: FinanceWizardStep,
+  ): Promise<void> {
+    await this.onboarding.setCurrentStep(this.getUserId(chatId), step);
+    const adv = await this.isAdvanced(chatId);
+    const uid = this.getUserId(chatId);
+
+    let text = '';
+    let keyboard: InlineKeyboardButton[][] = [];
+
+    switch (step) {
+      case 'start':
+        text =
+          `${this.financeTitle(adv)}\n\n🎓 *Configurar finanzas*\n\n` +
+          'Te guío en pocos pasos: cuenta en *Firefly*, token en el bot, *Gmail*, la *web* de Finanzas y, si quieres, la *app APK*.\n\n' +
+          'Puedes parar y seguir más tarde: guardamos tu último paso.';
+        keyboard = this.wizardNavKeyboard('start', { showBack: false });
+        break;
+      case 'firefly_signup':
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '📝 *Paso 1 — Firefly III*\n\n' +
+          '1. Crea tu espacio en Firefly III (web o propio).\n' +
+          '2. En Firefly, crea un *token personal* (PAT) desde preferencias / perfil.\n\n' +
+          '🔗 Documentación: https://docs.firefly-iii.org/\n\n' +
+          '_Todavía no pegues el token aquí si quieres seguir el orden del tutorial._';
+        keyboard = this.wizardNavKeyboard('firefly_signup');
+        break;
+      case 'firefly_token':
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '🔑 *Paso 2 — Token en el bot*\n\n' +
+          'Pulsa *Pegar token* y responde al mensaje que te envío. ' +
+          'El mensaje con tu token se borrará al procesarlo cuando Telegram lo permita.\n\n' +
+          'Si ya lo configuraste antes, usa *Verificar con la API*.';
+        keyboard = [
+          [
+            { text: '✍️ Pegar token', callback_data: 'finance:wiz_token' },
+            { text: '✅ Verificar con la API', callback_data: 'finance:wiz_verify_firefly' },
+          ],
+          ...this.wizardNavKeyboard('firefly_token', { showNext: false }),
+        ];
+        break;
+      case 'gmail': {
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '✉️ *Paso 3 — Gmail*\n\n' +
+          'Conecta tu cuenta de Google para que podamos leer los correos de movimientos.\n\n' +
+          'Abre el enlace, acepta permisos y vuelve aquí para *Verificar conexión*.';
+        const urlR = await this.financeService.getGmailAuthUrl(uid);
+        const kb: InlineKeyboardButton[][] = [];
+        if (urlR.success && (urlR.result as { authorization_url?: string })?.authorization_url) {
+          kb.push([
+            {
+              text: '🔐 Abrir enlace OAuth',
+              url: (urlR.result as { authorization_url: string }).authorization_url,
+            },
+          ]);
+        }
+        kb.push([{ text: '✅ Verificar conexión', callback_data: 'finance:wiz_verify_gmail' }]);
+        kb.push(...this.wizardNavKeyboard('gmail', { showNext: false }));
+        keyboard = kb;
+        break;
+      }
+      case 'web_ui':
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '🌐 *Paso 4 — Interfaz web*\n\n' +
+          'Abre la configuración y pega el *mismo* token de acceso personal en “personal access token”:\n\n' +
+          'https://finance.toothless.codes/settings/setup\n\n' +
+          'Cuando lo hayas hecho, pulsa *Ya lo configuré*.';
+        keyboard = [
+          [{ text: '✅ Ya lo configuré', callback_data: 'finance:wiz_web_done' }],
+          ...this.wizardNavKeyboard('web_ui'),
+        ];
+        break;
+      case 'apk': {
+        const hasApk = !!(await this.botAssets.getFinanceApk());
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '📱 *Paso 5 — App APK (opcional)*\n\n' +
+          (hasApk
+            ? 'Puedes descargar la APK desde aquí. En la app, si te lo pide, usa tu Telegram user ID:\n' +
+              `\`${uid}\`\n`
+            : 'Tu administrador aún no subió una APK al bot. Puedes omitir este paso.\n');
+        const row: InlineKeyboardButton[] = [];
+        if (hasApk && (await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_APK))) {
+          row.push({ text: '📥 Descargar APK', callback_data: 'finance:wiz_dl_apk' });
+        }
+        row.push({ text: '✅ Ya configuré la app', callback_data: 'finance:wiz_apk_done' });
+        row.push({ text: '⏭️ Omitir APK', callback_data: 'finance:wiz_apk_skip' });
+        keyboard = [row, ...this.wizardNavKeyboard('apk')];
+        break;
+      }
+      case 'complete':
+        text =
+          `${this.financeTitle(adv)}\n\n` +
+          '🎉 *Onboarding completado*\n\n' +
+          'Ya puedes usar *Operaciones* para procesar correos y revisar el estado. ' +
+          'Si cambias de móvil o token, vuelve al menú de Finanzas.';
+        keyboard = [
+          [{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }],
+          [{ text: '💰 Ir al menú Finanzas', callback_data: 'menu:finance' }],
+        ];
+        break;
+      default:
+        text = `${this.financeTitle(adv)}\n\nTutorial — paso desconocido, volvemos al inicio.`;
+        keyboard = this.wizardNavKeyboard('start', { showBack: false });
+    }
+
+    await this.editOrSend(chatId, messageId, text, keyboard);
+  }
+
   /**
    * Handle callback queries
    */
@@ -150,6 +579,40 @@ export class FinanceHandler {
     // Date selection
     if (action.startsWith('date_')) {
       await this.handleDateSelection(chatId, action, messageId);
+      return true;
+    }
+
+    if (
+      action === 'wizard' ||
+      action === 'review_setup' ||
+      action === 'ops_menu' ||
+      action.startsWith('wiz_')
+    ) {
+      if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+        return true;
+      }
+      if (action === 'review_setup') {
+        if (!(await this.sectionOn(FEATURE_FLAGS.FINANCE_SECTION_REVIEW))) {
+          await this.editOrSend(
+            chatId,
+            messageId,
+            'Esta sección no está disponible.',
+            [[{ text: '🔙 Volver', callback_data: 'menu:finance' }]],
+          );
+          return true;
+        }
+        await this.showConfigReview(chatId, messageId);
+        return true;
+      }
+      if (action === 'ops_menu') {
+        await this.showSimpleOperationsMenu(chatId, messageId);
+        return true;
+      }
+      if (action === 'wizard') {
+        await this.openFinanceWizard(chatId, messageId);
+        return true;
+      }
+      await this.handleWizardAction(chatId, action, messageId);
       return true;
     }
 
@@ -1126,10 +1589,19 @@ export class FinanceHandler {
       },
     );
 
-    const token = await this.botInstance.getOnReplyMessageResponse(chatId, promptMsg.message_id);
+    const fromWizard = this.wizardAfterToken.has(chatId);
+    const { text: token, replyMessageId } = await this.botInstance.getOnReplyMessageResponse(
+      chatId,
+      promptMsg.message_id,
+    );
+
+    if (replyMessageId) {
+      await this.botInstance.deleteMessageSafe(chatId, replyMessageId);
+    }
 
     const normalizedToken = token?.trim();
     if (!normalizedToken) {
+      if (fromWizard) this.wizardAfterToken.delete(chatId);
       await this.bot.sendMessage(
         chatId,
         '❌ No escribiste nada. Vuelve a *Finanzas* e inténtalo de nuevo.',
@@ -1149,6 +1621,13 @@ export class FinanceHandler {
     );
 
     if (result.success) {
+      if (fromWizard) {
+        this.wizardAfterToken.delete(chatId);
+        await this.onboarding.markFireflyTokenDone(this.getUserId(chatId));
+        await this.renderWizardStep(chatId, undefined, 'gmail');
+        return;
+      }
+      await this.onboarding.touchFireflyTokenOk(this.getUserId(chatId));
       await this.bot.sendMessage(
         chatId,
         adv
@@ -1164,6 +1643,7 @@ export class FinanceHandler {
       return;
     }
 
+    if (fromWizard) this.wizardAfterToken.delete(chatId);
     await this.bot.sendMessage(
       chatId,
       adv

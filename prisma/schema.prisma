@@ -39,3 +39,36 @@ model UserSettings {
 
   @@map("user_settings")
 }
+
+/// Progreso del onboarding guiado de Finance (chatId = userId)
+model FinanceOnboardingProgress {
+  userId           String    @id @map("user_id")
+  currentStep      String    @default("start") @map("current_step")
+  gmailDone        Boolean   @default(false) @map("gmail_done")
+  fireflyTokenDone Boolean   @default(false) @map("firefly_token_done")
+  webUiDone        Boolean   @default(false) @map("web_ui_done")
+  apkManualDone    Boolean   @default(false) @map("apk_manual_done")
+  completedAt      DateTime? @map("completed_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@map("finance_onboarding_progress")
+}
+
+/// Archivos del bot referenciados por Telegram file_id (ej. APK)
+model BotAsset {
+  id           String   @id
+  fileId       String   @map("file_id")
+  fileUniqueId String?  @map("file_unique_id")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_assets")
+}
+
+/// Feature flags globales (key -> enabled)
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("feature_flags")
+}

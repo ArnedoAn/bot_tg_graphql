@@ -20,6 +20,10 @@ export class BotService {
         { command: 'menu', description: 'Abre el menu principal' },
         { command: 'modo', description: 'Elegir menu simple o avanzado' },
         { command: 'finance', description: 'Abre el modulo de finanzas' },
+        {
+          command: 'configurar_finanzas',
+          description: 'Asistente guiado para configurar Finanzas',
+        },
         { command: 'analyze', description: 'Procesa transacciones de emails' },
         { command: 'init', description: 'Registra tu tarjeta Transcaribe' },
         { command: 'saldo', description: 'Consulta saldo de Transcaribe' },
@@ -47,13 +51,32 @@ export class BotService {
     return await this.bot.sendMessage(chatId, message, options);
   }
 
+  async sendDocumentByFileId(
+    chatId: number,
+    fileId: string,
+    options: TelegramBot.SendDocumentOptions = {},
+  ): Promise<TelegramBot.Message> {
+    return await this.bot.sendDocument(chatId, fileId, options);
+  }
+
+  async deleteMessageSafe(chatId: number, messageId: number): Promise<void> {
+    try {
+      await this.bot.deleteMessage(chatId, messageId);
+    } catch {
+      // Sin permisos o mensaje antiguo: ignorar
+    }
+  }
+
   async getOnReplyMessageResponse(
     chatId: number,
     message_id: number,
-  ): Promise<string> {
+  ): Promise<{ text?: string; replyMessageId?: number }> {
     return new Promise((resolve) => {
       this.bot.onReplyToMessage(chatId, message_id, (msgToReply) => {
-        resolve(msgToReply.text);
+        const text =
+          msgToReply.text ??
+          ('caption' in msgToReply ? (msgToReply as TelegramBot.Message).caption : undefined);
+        resolve({ text, replyMessageId: msgToReply.message_id });
       });
     });
   }

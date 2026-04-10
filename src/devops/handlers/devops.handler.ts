@@ -152,7 +152,7 @@ export class DevopsHandler {
         },
       );
 
-      const subdomain = await this.botInstance.getOnReplyMessageResponse(
+      const { text: subdomain } = await this.botInstance.getOnReplyMessageResponse(
         chatId,
         promptMsg.message_id,
       );
@@ -246,7 +246,7 @@ export class DevopsHandler {
         },
       );
 
-      const subdomain = await this.botInstance.getOnReplyMessageResponse(
+      const { text: subdomain } = await this.botInstance.getOnReplyMessageResponse(
         chatId,
         promptMsg.message_id,
       );
@@ -327,7 +327,10 @@ export class DevopsHandler {
           reply_markup: { force_reply: true },
         },
       );
-      const domain = await this.botInstance.getOnReplyMessageResponse(chatId, domainMsg.message_id);
+      const { text: domain } = await this.botInstance.getOnReplyMessageResponse(
+        chatId,
+        domainMsg.message_id,
+      );
 
       const portMsg = await this.botInstance.sendMessageToUser(
         chatId,
@@ -337,7 +340,10 @@ export class DevopsHandler {
           reply_markup: { force_reply: true },
         },
       );
-      const port = await this.botInstance.getOnReplyMessageResponse(chatId, portMsg.message_id);
+      const { text: port } = await this.botInstance.getOnReplyMessageResponse(
+        chatId,
+        portMsg.message_id,
+      );
 
       const descMsg = await this.botInstance.sendMessageToUser(
         chatId,
@@ -347,7 +353,7 @@ export class DevopsHandler {
           reply_markup: { force_reply: true },
         },
       );
-      const description = await this.botInstance.getOnReplyMessageResponse(
+      const { text: description } = await this.botInstance.getOnReplyMessageResponse(
         chatId,
         descMsg.message_id,
       );

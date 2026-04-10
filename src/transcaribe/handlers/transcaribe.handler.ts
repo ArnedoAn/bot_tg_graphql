@@ -79,7 +79,7 @@ export class TranscaribeHandler {
         },
       );
 
-      const cardApi = await this.botInstace.getOnReplyMessageResponse(
+      const { text: cardApi } = await this.botInstace.getOnReplyMessageResponse(
         chatId,
         firtMsg.message_id,
       );
@@ -94,7 +94,7 @@ export class TranscaribeHandler {
         },
       );
 
-      const apiKey = await this.botInstace.getOnReplyMessageResponse(
+      const { text: apiKey } = await this.botInstace.getOnReplyMessageResponse(
         chatId,
         secondMsg.message_id,
       );

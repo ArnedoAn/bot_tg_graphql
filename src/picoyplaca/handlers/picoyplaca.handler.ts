@@ -80,7 +80,7 @@ export class PicoyplacaHandler {
         },
       );
 
-      const vehicleName = await this.botInstace.getOnReplyMessageResponse(
+      const { text: vehicleName } = await this.botInstace.getOnReplyMessageResponse(
         chatId,
         firtMsg.message_id,
       );
@@ -103,7 +103,7 @@ export class PicoyplacaHandler {
         },
       );
 
-      const lastDigit = await this.botInstace.getOnReplyMessageResponse(
+      const { text: lastDigit } = await this.botInstace.getOnReplyMessageResponse(
         chatId,
         secondMsg.message_id,
       );

@@ -125,7 +125,9 @@ export class FinanceService {
         use_known_senders: true,
       };
 
-      this.logger.log(`Launching batch processing: ${JSON.stringify(requestBody)}`);
+      this.logger.log(
+        `[userId=${userId}] launchBatchProcessing after_date=${requestBody.after_date} dry_run=${requestBody.dry_run}`,
+      );
       const url = `${this.apiBaseUrl}/api/v1/processing/batch`;
       this.logUserRequest(userId, 'launchBatchProcessing', url);
       const response = await firstValueFrom(
@@ -227,7 +229,9 @@ export class FinanceService {
   }
 
   /**
-   * Set Firefly personal access token
+   * Set Firefly personal access token.
+   * El token viaja solo en el cuerpo HTTPS; no se registra en logs.
+   * Cifrado en reposo y aislamiento por usuario deben aplicarse en el Finance API.
    */
   async setFireflyToken(userId: string, token: string): Promise<Result> {
     try {
@@ -241,7 +245,7 @@ export class FinanceService {
 
       return { success: true, result: response.data };
     } catch (error) {
-      this.logger.error(`Set Firefly token failed: ${error.message}`);
+      this.logger.error(`Set Firefly token failed for userId=${userId}: ${error.message}`);
       return {
         success: false,
         result: error.response?.data?.detail || error.message,

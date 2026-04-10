@@ -7,6 +7,10 @@ import { PicoyplacaHandler } from '../picoyplaca/handlers/picoyplaca.handler';
 import { TranscaribeHandler } from '../transcaribe/handlers/transcaribe.handler';
 import { DevopsHandler } from '../devops/handlers/devops.handler';
 import { FinanceHandler } from '../finance/handlers/finance.handler';
+import { AdminHandler } from '../admin/admin.handler';
+import { FeatureFlagsService } from '../shared/prisma/feature-flags.service';
+import { BotAssetService } from '../shared/prisma/bot-asset.service';
+import { FEATURE_FLAGS } from '../shared/constants/feature-flag-keys';
 
 @Injectable()
 export class TelegramService {
@@ -20,6 +24,9 @@ export class TelegramService {
     private readonly transcaribeHandler: TranscaribeHandler,
     private readonly devopsHandler: DevopsHandler,
     private readonly financeHandler: FinanceHandler,
+    private readonly adminHandler: AdminHandler,
+    private readonly featureFlags: FeatureFlagsService,
+    private readonly botAssets: BotAssetService,
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
@@ -28,19 +35,42 @@ export class TelegramService {
 
   private async getMainMenuOptions(chatId: number): Promise<TelegramBot.InlineKeyboardButton[][]> {
     const advanced = await this.userMenuMode.isAdvancedUser(chatId);
-    const rows: TelegramBot.InlineKeyboardButton[][] = [
-      [{ text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' }],
-      [{ text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' }],
-      [
+    const isAdmin = this.adminHandler.isAdmin(chatId);
+    const launchSolo =
+      !isAdmin && (await this.featureFlags.isEnabled(FEATURE_FLAGS.FINANCE_LAUNCH_SOLO));
+
+    const rows: TelegramBot.InlineKeyboardButton[][] = [];
+
+    if (!launchSolo) {
+      if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_TRANSCARIBE)) {
+        rows.push([{ text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' }]);
+      }
+      if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_PICOYPLACA)) {
+        rows.push([{ text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' }]);
+      }
+    }
+
+    if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE)) {
+      rows.push([
         {
           text: advanced ? '💰 Finance Analyzer' : '💰 Finanzas',
           callback_data: 'menu:finance',
         },
-      ],
-    ];
-    if (advanced) {
+      ]);
+    }
+
+    if (
+      advanced &&
+      isAdmin &&
+      (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_DEVOPS))
+    ) {
       rows.push([{ text: '🔧 DevOps', callback_data: 'menu:devops' }]);
     }
+
+    if (isAdmin) {
+      rows.push([{ text: '🔐 Admin', callback_data: 'menu:admin' }]);
+    }
+
     rows.push([
       {
         text: '⚙️ Cambiar modo de menú',
@@ -134,6 +164,14 @@ export class TelegramService {
           await this.picoyplacaHandler.handleCallback(chatId, action);
           break;
         case 'devops':
+          if (!this.adminHandler.isAdmin(chatId)) {
+            await this.botInstance.sendMessageToUser(
+              chatId,
+              '🔒 *DevOps* solo está disponible para el administrador.',
+              { parse_mode: 'Markdown' },
+            );
+            break;
+          }
           if (!(await this.userMenuMode.isAdvancedUser(chatId))) {
             await this.botInstance.sendMessageToUser(
               chatId,
@@ -146,6 +184,9 @@ export class TelegramService {
           break;
         case 'finance':
           await this.financeHandler.handleCallback(chatId, action, query.message.message_id);
+          break;
+        case 'admin':
+          await this.adminHandler.handleCallback(chatId, action, query.message.message_id);
           break;
       }
     });
@@ -174,12 +215,28 @@ export class TelegramService {
         await this.showMainMenu(chatId, messageId);
         break;
       case 'transcaribe':
+        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_TRANSCARIBE))) {
+          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+          return;
+        }
         await this.transcaribeHandler.showMenu(chatId);
         break;
       case 'picoyplaca':
+        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_PICOYPLACA))) {
+          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+          return;
+        }
         await this.picoyplacaHandler.showMenu(chatId);
         break;
       case 'devops':
+        if (!this.adminHandler.isAdmin(chatId)) {
+          await this.botInstance.sendMessageToUser(
+            chatId,
+            '🔒 *DevOps* solo está disponible para el administrador.',
+            { parse_mode: 'Markdown' },
+          );
+          return;
+        }
         if (!(await this.userMenuMode.isAdvancedUser(chatId))) {
           await this.botInstance.sendMessageToUser(
             chatId,
@@ -188,10 +245,21 @@ export class TelegramService {
           );
           return;
         }
+        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_DEVOPS))) {
+          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+          return;
+        }
         await this.devopsHandler.showMenu(chatId);
         break;
       case 'finance':
+        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+          return;
+        }
         await this.financeHandler.showMenu(chatId);
+        break;
+      case 'admin':
+        await this.adminHandler.showPanel(chatId, messageId);
         break;
     }
   }
@@ -209,10 +277,40 @@ export class TelegramService {
       await this.showModePicker(msg.chat.id);
     });
 
+    this.bot.onText(/\/admin/, async (msg: TelegramBot.Message) => {
+      await this.adminHandler.showPanel(msg.chat.id);
+    });
+
+    this.setupAdminApkDocumentListener();
+
     this.transcaribeListeners();
     this.picoYPlacaListeners();
     this.devopsListeners();
     this.financeListeners();
+  }
+
+  /** Solo admin: recibir APK como documento y guardar file_id para el tutorial. */
+  private setupAdminApkDocumentListener(): void {
+    this.bot.on('message', async (msg: TelegramBot.Message) => {
+      try {
+        if (!msg.chat?.id || !msg.document) return;
+        if (!this.adminHandler.isAdmin(msg.chat.id)) return;
+        const name = (msg.document.file_name || '').toLowerCase();
+        const mime = msg.document.mime_type || '';
+        const isApk =
+          mime === 'application/vnd.android.package-archive' || name.endsWith('.apk');
+        if (!isApk) return;
+        await this.botAssets.setFinanceApk(msg.document.file_id, msg.document.file_unique_id);
+        await this.botInstance.sendMessageToUser(
+          msg.chat.id,
+          '✅ *APK de Finanzas registrada.* Los usuarios podrán descargarla desde el tutorial.\n\n' +
+            '_Puedes enviar otra APK para reemplazarla._',
+          { parse_mode: 'Markdown' },
+        );
+      } catch {
+        // ignorar
+      }
+    });
   }
 
   private async financeListeners() {
@@ -222,6 +320,10 @@ export class TelegramService {
 
     this.bot.onText(/\/finance/, async (msg: TelegramBot.Message) => {
       await this.financeHandler.showMenu(msg.chat.id);
+    });
+
+    this.bot.onText(/\/configurar_finanzas/, async (msg: TelegramBot.Message) => {
+      await this.financeHandler.openFinanceWizard(msg.chat.id);
     });
   }
 

@@ -5,9 +5,17 @@ import { SharedModule } from '../shared/shared.module';
 import { TranscaribeModule } from '../transcaribe/transcaribe.module';
 import { DevopsModule } from '../devops/devops.module';
 import { FinanceModule } from '../finance/finance.module';
+import { AdminModule } from '../admin/admin.module';
 
 @Module({
   providers: [TelegramService],
-  imports: [PicoyplacaModule, SharedModule, TranscaribeModule, DevopsModule, FinanceModule],
+  imports: [
+    PicoyplacaModule,
+    SharedModule,
+    TranscaribeModule,
+    DevopsModule,
+    FinanceModule,
+    AdminModule,
+  ],
 })
 export class TelegramModule {}
