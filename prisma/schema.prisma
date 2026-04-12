@@ -72,3 +72,40 @@ model FeatureFlag {
 
   @@map("feature_flags")
 }
+
+/// Usuario del bot (chatId de Telegram); se registra en /start
+model User {
+  id        String   @id @map("user_id")
+  username  String?
+  firstName String?  @map("first_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+/// Solicitud de correo Google en modo pruebas (whitelist en Google Cloud Console)
+model GoogleWhitelist {
+  userId    String   @id @map("user_id")
+  email     String
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("google_whitelist")
+}
+
+/// Caché de estado de integraciones y control de notificaciones del cron
+model UserIntegrationStatus {
+  userId               String    @id @map("user_id")
+  gmailConnected       Boolean   @default(false) @map("gmail_connected")
+  fireflyConnected     Boolean   @default(false) @map("firefly_connected")
+  gmailEverConnected   Boolean   @default(false) @map("gmail_ever_connected")
+  fireflyEverConnected Boolean   @default(false) @map("firefly_ever_connected")
+  lastCheckedAt        DateTime? @map("last_checked_at")
+  lastNotifiedAt       DateTime? @map("last_notified_at")
+  lastOnboardingReminderAt DateTime? @map("last_onboarding_reminder_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_integration_status")
+}

@@ -24,6 +24,7 @@ export class BotService {
           command: 'configurar_finanzas',
           description: 'Asistente guiado para configurar Finanzas',
         },
+        { command: 'status', description: 'Ver estado de integraciones (Finanzas)' },
         { command: 'analyze', description: 'Procesa transacciones de emails' },
         { command: 'init', description: 'Registra tu tarjeta Transcaribe' },
         { command: 'saldo', description: 'Consulta saldo de Transcaribe' },

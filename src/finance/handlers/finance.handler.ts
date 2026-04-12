@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import TelegramBot, { InlineKeyboardButton } from 'node-telegram-bot-api';
 import { BotService } from '../../shared/instances/bot.service';
 import { UserMenuModeService } from '../../shared/instances/user-menu-mode.service';
+import { UserService } from '../../shared/prisma/user.service';
 import {
   FinanceService,
   BatchProcessingResponse,
@@ -47,6 +49,8 @@ export class FinanceHandler {
     private readonly featureFlags: FeatureFlagsService,
     private readonly onboarding: FinanceOnboardingService,
     private readonly botAssets: BotAssetService,
+    private readonly userService: UserService,
+    private readonly configService: ConfigService,
   ) {
     this.bot = this.botInstance.getBot();
   }
@@ -70,6 +74,38 @@ export class FinanceHandler {
 
   private async sectionOn(key: (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS]): Promise<boolean> {
     return this.featureFlags.isEnabled(key);
+  }
+
+  private isGoogleTestingMode(): boolean {
+    return this.configService.get<string>('GOOGLE_TESTING_MODE', 'false').toLowerCase() === 'true';
+  }
+
+  private buildProgressBar(
+    step: FinanceWizardStep,
+    prog: {
+      fireflyTokenDone: boolean;
+      gmailDone: boolean;
+      webUiDone: boolean;
+      apkManualDone: boolean;
+    },
+  ): string {
+    const items: { key: FinanceWizardStep; done: boolean }[] = [
+      { key: 'firefly_signup', done: prog.fireflyTokenDone },
+      { key: 'firefly_token', done: prog.fireflyTokenDone },
+      { key: 'gmail', done: prog.gmailDone },
+      { key: 'web_ui', done: prog.webUiDone },
+      { key: 'apk', done: prog.apkManualDone },
+    ];
+    let activeIndex = items.findIndex((x) => x.key === step);
+    if (step === 'start') activeIndex = 0;
+    if (step === 'complete') activeIndex = items.length;
+    const icons = items.map((x, i) => {
+      if (x.done) return '✅';
+      if (step !== 'complete' && i === activeIndex) return '🔵';
+      return '⚪';
+    });
+    const label = step === 'complete' ? items.length : Math.min(activeIndex + 1, items.length);
+    return `${icons.join(' ')}  _(${label}/${items.length})_\n\n`;
   }
 
   /**
@@ -314,7 +350,7 @@ export class FinanceHandler {
     await this.editOrSend(chatId, messageId, text, keyboard);
   }
 
-  private async showConfigReview(chatId: number, messageId?: number): Promise<void> {
+  async showConfigReview(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const uid = this.getUserId(chatId);
     const [gmailR, fireflyR, prog] = await Promise.all([
@@ -446,9 +482,122 @@ export class FinanceHandler {
         await this.onboarding.markComplete(uid);
         await this.renderWizardStep(chatId, messageId, 'complete');
         break;
+      case 'wiz_send_google_email':
+        await this.requestGoogleTestEmailAction(chatId, messageId);
+        break;
+      case 'wiz_check_whitelist':
+        await this.renderWizardStep(chatId, messageId, 'gmail');
+        break;
+      case 'wiz_jump:gmail':
+        await this.onboarding.setCurrentStep(uid, 'gmail');
+        await this.renderWizardStep(chatId, messageId, 'gmail');
+        break;
+      case 'wiz_jump:firefly_token':
+        await this.onboarding.setCurrentStep(uid, 'firefly_token');
+        await this.renderWizardStep(chatId, messageId, 'firefly_token');
+        break;
       default:
         await this.renderWizardStep(chatId, messageId, step);
     }
+  }
+
+  private isValidEmail(raw: string): boolean {
+    const s = raw.trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  }
+
+  /**
+   * Modo pruebas Google: el usuario envía su correo; se notifica al admin con lista de pendientes.
+   */
+  private async requestGoogleTestEmailAction(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
+    const adv = await this.isAdvanced(chatId);
+    const uid = this.getUserId(chatId);
+    if (messageId) {
+      await this.bot.editMessageText(
+        `${this.financeTitle(adv)}\n\n📧 Escribe tu correo de *Google* en el siguiente mensaje (responde al mensaje que te envío).`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🔙 Volver', callback_data: 'menu:finance' }]],
+          },
+        },
+      );
+    }
+
+    const promptMsg = await this.bot.sendMessage(
+      chatId,
+      '✍️ *Responde a este mensaje* con tu correo de Google (el que usarás con Gmail).',
+      { parse_mode: 'Markdown', reply_markup: { force_reply: true } },
+    );
+
+    const { text: emailRaw, replyMessageId } = await this.botInstance.getOnReplyMessageResponse(
+      chatId,
+      promptMsg.message_id,
+    );
+
+    if (replyMessageId) {
+      await this.botInstance.deleteMessageSafe(chatId, replyMessageId);
+    }
+
+    const email = emailRaw?.trim() ?? '';
+    if (!this.isValidEmail(email)) {
+      await this.botInstance.sendMessageToUser(
+        chatId,
+        '❌ Correo no válido. Vuelve al tutorial y pulsa *Enviar mi correo de Google* otra vez.',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '🎓 Volver al tutorial', callback_data: 'finance:wizard' }]],
+          },
+        },
+      );
+      return;
+    }
+
+    await this.userService.upsertWhitelistRequest(uid, email);
+
+    const userRow = await this.userService.getUserById(uid);
+    const display =
+      [userRow?.firstName, userRow?.username ? `@${userRow.username}` : null]
+        .filter(Boolean)
+        .join(' ') || `\`${uid}\``;
+
+    const adminId = this.configService.get<string>('ADMIN_ID', '');
+    const adminChat = Number(adminId);
+    if (adminId.length > 0 && Number.isFinite(adminChat)) {
+      const pending = await this.userService.getPendingWhitelistEmails();
+      let list = pending.map((p) => `• \`${p.email}\` → usuario \`${p.userId}\``).join('\n');
+      if (list.length > 3500) {
+        list = `${list.slice(0, 3500)}\n…`;
+      }
+
+      await this.botInstance.sendMessageToUser(
+        adminChat,
+        '📧 *Solicitud Gmail (modo pruebas)*\n\n' +
+          `Usuario: ${display}\n` +
+          `ID Telegram: \`${uid}\`\n` +
+          `Correo: \`${email}\`\n\n` +
+          'Agrega el correo en *Google Cloud Console* (usuarios de prueba) y pulsa *Aprobar*.\n\n' +
+          '*Lista de pendientes:*\n' +
+          (list || '_solo esta solicitud_'),
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '✅ Aprobar este correo', callback_data: `admin:approve_gmail:${uid}` }],
+              [{ text: '📋 Ver todos los pendientes', callback_data: 'admin:pending_gmail' }],
+            ],
+          },
+        },
+      );
+    }
+
+    await this.renderWizardStep(chatId, undefined, 'gmail');
   }
 
   /**
@@ -509,6 +658,7 @@ export class FinanceHandler {
     await this.onboarding.setCurrentStep(this.getUserId(chatId), step);
     const adv = await this.isAdvanced(chatId);
     const uid = this.getUserId(chatId);
+    const prog = await this.onboarding.getOrCreate(uid);
 
     let text = '';
     let keyboard: InlineKeyboardButton[][] = [];
@@ -562,6 +712,45 @@ export class FinanceHandler {
         ];
         break;
       case 'gmail': {
+        const testing = this.isGoogleTestingMode();
+        const wl = await this.userService.getWhitelistByUserId(uid);
+
+        if (testing) {
+          if (!wl) {
+            text =
+              `${this.financeTitle(adv)}\n\n` +
+              '✉️ *Paso 3 — Gmail (modo pruebas)*\n\n' +
+              'El proyecto de Google está en *pantalla de consentimiento de prueba*: solo cuentas que el administrador agregue en la consola pueden usar OAuth.\n\n' +
+              '1. Pulsa *Enviar mi correo de Google* y escribe tu correo.\n' +
+              '2. El administrador lo añadirá en Google Cloud Console.\n' +
+              '3. Cuando te avise (o veas el botón *Verificar estado* activo), continuarás con el enlace OAuth aquí.\n\n' +
+              '_Hasta entonces no uses “Abrir OAuth”: fallará si tu correo no está en la lista._';
+            keyboard = [
+              [
+                {
+                  text: '📧 Enviar mi correo de Google',
+                  callback_data: 'finance:wiz_send_google_email',
+                },
+              ],
+              ...this.wizardNavKeyboard('gmail', { showNext: false }),
+            ];
+            break;
+          }
+          if (!wl.approved) {
+            text =
+              `${this.financeTitle(adv)}\n\n` +
+              '✉️ *Gmail — esperando administrador*\n\n' +
+              `Tu correo registrado: \`${wl.email}\`\n\n` +
+              'El administrador debe agregarlo como *usuario de prueba* en Google Cloud Console. ' +
+              'Cuando lo haya hecho, pulsa *Verificar estado* y, si ya está aprobado, verás el enlace OAuth.';
+            keyboard = [
+              [{ text: '🔄 Verificar estado', callback_data: 'finance:wiz_check_whitelist' }],
+              ...this.wizardNavKeyboard('gmail', { showNext: false }),
+            ];
+            break;
+          }
+        }
+
         text =
           `${this.financeTitle(adv)}\n\n` +
           '✉️ *Paso 3 — Gmail*\n\n' +
@@ -647,7 +836,8 @@ export class FinanceHandler {
         keyboard = this.wizardNavKeyboard('start', { showBack: false });
     }
 
-    await this.editOrSend(chatId, messageId, text, keyboard);
+    const progressBar = this.buildProgressBar(step, prog);
+    await this.editOrSend(chatId, messageId, progressBar + text, keyboard);
   }
 
   /**

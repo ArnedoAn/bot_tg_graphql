@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BotService } from '../shared/instances/bot.service';
 import TelegramBot, { InlineKeyboardButton } from 'node-telegram-bot-api';
 import { FeatureFlagsService } from '../shared/prisma/feature-flags.service';
 import { BotAssetService } from '../shared/prisma/bot-asset.service';
+import { UserService } from '../shared/prisma/user.service';
+import { FinanceStatusCronService } from '../finance/finance-status-cron.service';
 import {
   ALL_FEATURE_FLAG_KEYS,
   FeatureFlagKey,
@@ -36,6 +38,7 @@ const FLAG_LABELS: Record<FeatureFlagKey, string> = {
 
 @Injectable()
 export class AdminHandler {
+  private readonly logger = new Logger(AdminHandler.name);
   private readonly bot: TelegramBot;
   private readonly adminId: string;
   private readonly unauthorizedMessage = '🔒 Solo el administrador puede usar el panel.';
@@ -45,6 +48,8 @@ export class AdminHandler {
     private readonly configService: ConfigService,
     private readonly featureFlags: FeatureFlagsService,
     private readonly botAssets: BotAssetService,
+    private readonly userService: UserService,
+    private readonly financeCronStatus: FinanceStatusCronService,
   ) {
     this.bot = this.botInstance.getBot();
     this.adminId = this.configService.get<string>('ADMIN_ID', '');
@@ -70,6 +75,12 @@ export class AdminHandler {
         },
       ]);
     });
+    rows.push([
+      { text: '📊 Monitor de usuarios', callback_data: 'admin:cron_status' },
+    ]);
+    rows.push([
+      { text: '📧 Correos Gmail pendientes', callback_data: 'admin:pending_gmail' },
+    ]);
     rows.push([
       { text: '⬅️ Volver al menú', callback_data: 'menu:main' },
     ]);
@@ -118,6 +129,124 @@ export class AdminHandler {
   ): Promise<void> {
     if (!this.isAdmin(chatId)) {
       await this.deny(chatId);
+      return;
+    }
+
+    if (action === 'cron_status') {
+      const snap = this.financeCronStatus.getLastSnapshot();
+      const agoMs = snap ? Date.now() - snap.ranAt.getTime() : 0;
+      const agoMin = Math.floor(agoMs / 60000);
+      const agoHuman =
+        !snap || agoMin < 1
+          ? 'hace un momento'
+          : agoMin < 60
+            ? `hace ${agoMin} min`
+            : agoMin < 1440
+              ? `hace ${Math.floor(agoMin / 60)} h`
+              : `hace ${Math.floor(agoMin / 1440)} d`;
+      const text = snap
+        ? '📊 *Monitor de usuarios (último cron)*\n\n' +
+          `• Último chequeo: _${agoHuman}_ (${snap.ranAt.toISOString()})\n` +
+          `• Usuarios comprobados: ${snap.usersChecked}\n` +
+          `• Con problemas: ${snap.usersWithProblems}\n` +
+          `• Fallos Gmail: ${snap.gmailIssues}\n` +
+          `• Fallos Firefly: ${snap.fireflyIssues}\n` +
+          `• Notificaciones enviadas: ${snap.notificationsSent}\n` +
+          `• Recordatorios onboarding: ${snap.onboardingRemindersSent}\n` +
+          `• Duración: ${snap.elapsedMs} ms\n` +
+          (snap.errors.length
+            ? `\n*Errores:*\n${snap.errors.slice(0, 8).map((e) => `• ${e}`).join('\n')}`
+            : '')
+        : '📊 *Monitor de usuarios*\n\n_Aún no hay ejecuciones registradas (el cron corre a las 08:00)._';
+
+      if (messageId) {
+        await this.bot.editMessageText(text, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]],
+          },
+        });
+      } else {
+        await this.botInstance.sendMessageToUser(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]],
+          },
+        });
+      }
+      return;
+    }
+
+    if (action === 'pending_gmail') {
+      const pending = await this.userService.getPendingWhitelistEmails();
+      let body =
+        '📧 *Correos Gmail pendientes de aprobación*\n\n' +
+        '_Agrega cada correo en Google Cloud Console (usuarios de prueba) y pulsa Aprobar._\n\n';
+      if (pending.length === 0) {
+        body += '_No hay solicitudes pendientes._';
+      }
+      const keyboard: InlineKeyboardButton[][] = [];
+      for (const p of pending.slice(0, 20)) {
+        const row: InlineKeyboardButton[] = [
+          {
+            text: `✅ ${p.email.slice(0, 28)}`,
+            callback_data: `admin:approve_gmail:${p.userId}`,
+          },
+        ];
+        keyboard.push(row);
+      }
+      keyboard.push([{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]);
+
+      if (messageId) {
+        await this.bot.editMessageText(body, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: keyboard },
+        });
+      } else {
+        await this.botInstance.sendMessageToUser(chatId, body, {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: keyboard },
+        });
+      }
+      return;
+    }
+
+    if (action.startsWith('approve_gmail:')) {
+      const targetUserId = action.slice('approve_gmail:'.length).trim();
+      try {
+        await this.userService.setWhitelistApproved(targetUserId, true);
+        const targetChat = Number(targetUserId);
+        if (Number.isFinite(targetChat)) {
+          await this.botInstance.sendMessageToUser(
+            targetChat,
+            '✅ *Tu correo fue aprobado.*\n\nYa puedes continuar con la configuración de *Gmail* en el tutorial.',
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '▶️ Continuar tutorial', callback_data: 'finance:wizard' }],
+                ],
+              },
+            },
+          );
+        }
+        await this.botInstance.sendMessageToUser(
+          chatId,
+          `✅ Aprobado el correo del usuario \`${targetUserId}\`.`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch (e) {
+        this.logger.warn(`approve_gmail failed: ${e}`);
+        await this.botInstance.sendMessageToUser(
+          chatId,
+          '❌ No se pudo aprobar (¿solicitud inexistente?).',
+        );
+      }
+      await this.showPanel(chatId, messageId);
       return;
     }
 

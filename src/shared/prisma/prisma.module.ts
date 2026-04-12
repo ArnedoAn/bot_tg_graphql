@@ -7,6 +7,7 @@ import { UserSettingsService } from './user-settings.service';
 import { FeatureFlagsService } from './feature-flags.service';
 import { FinanceOnboardingService } from './finance-onboarding.service';
 import { BotAssetService } from './bot-asset.service';
+import { UserService } from './user.service';
 
 @Module({
   providers: [
@@ -18,6 +19,7 @@ import { BotAssetService } from './bot-asset.service';
     FeatureFlagsService,
     FinanceOnboardingService,
     BotAssetService,
+    UserService,
   ],
   exports: [
     TarjetaService,
@@ -27,6 +29,7 @@ import { BotAssetService } from './bot-asset.service';
     FeatureFlagsService,
     FinanceOnboardingService,
     BotAssetService,
+    UserService,
   ],
 })
 export class PrismaModule {}

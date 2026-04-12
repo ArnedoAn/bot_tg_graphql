@@ -10,6 +10,7 @@ import { FinanceHandler } from '../finance/handlers/finance.handler';
 import { AdminHandler } from '../admin/admin.handler';
 import { FeatureFlagsService } from '../shared/prisma/feature-flags.service';
 import { BotAssetService } from '../shared/prisma/bot-asset.service';
+import { UserService } from '../shared/prisma/user.service';
 import { FEATURE_FLAGS } from '../shared/constants/feature-flag-keys';
 
 @Injectable()
@@ -27,6 +28,7 @@ export class TelegramService {
     private readonly adminHandler: AdminHandler,
     private readonly featureFlags: FeatureFlagsService,
     private readonly botAssets: BotAssetService,
+    private readonly userService: UserService,
   ) {
     this.bot = this.botInstance.getBot();
     this.setupListeners();
@@ -51,12 +53,12 @@ export class TelegramService {
     }
 
     if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE)) {
-      rows.push([
-        {
-          text: advanced ? '💰 Finance Analyzer' : '💰 Finanzas',
-          callback_data: 'menu:finance',
-        },
-      ]);
+      let financeLabel = advanced ? '💰 Finance Analyzer' : '💰 Finanzas';
+      const st = await this.userService.getIntegrationStatus(String(chatId));
+      if (st && (!st.gmailConnected || !st.fireflyConnected)) {
+        financeLabel += ' ⚠️';
+      }
+      rows.push([{ text: financeLabel, callback_data: 'menu:finance' }]);
     }
 
     if (
@@ -111,8 +113,18 @@ export class TelegramService {
     }
   }
 
+  private async registerUserFromMessage(msg: TelegramBot.Message): Promise<void> {
+    const from = msg.from;
+    await this.userService.upsertUser(String(msg.chat.id), {
+      username: from?.username ?? undefined,
+      firstName: from?.first_name ?? undefined,
+    });
+  }
+
   /** /start: si no hay preferencia, selector; si ya eligió, menú de módulos */
-  private async showEntryOrMainMenu(chatId: number): Promise<void> {
+  private async showEntryOrMainMenu(msg: TelegramBot.Message): Promise<void> {
+    await this.registerUserFromMessage(msg);
+    const chatId = msg.chat.id;
     const chosen = await this.userMenuMode.hasChosenMenuMode(chatId);
     if (!chosen) {
       await this.showModePicker(chatId);
@@ -266,10 +278,11 @@ export class TelegramService {
 
   private async setupListeners() {
     this.bot.onText(/\/start/, async (msg: TelegramBot.Message) => {
-      await this.showEntryOrMainMenu(msg.chat.id);
+      await this.showEntryOrMainMenu(msg);
     });
 
     this.bot.onText(/\/menu/, async (msg: TelegramBot.Message) => {
+      await this.registerUserFromMessage(msg);
       await this.showMainMenu(msg.chat.id);
     });
 
@@ -319,11 +332,22 @@ export class TelegramService {
     });
 
     this.bot.onText(/\/finance/, async (msg: TelegramBot.Message) => {
+      await this.registerUserFromMessage(msg);
       await this.financeHandler.showMenu(msg.chat.id);
     });
 
     this.bot.onText(/\/configurar_finanzas/, async (msg: TelegramBot.Message) => {
+      await this.registerUserFromMessage(msg);
       await this.financeHandler.openFinanceWizard(msg.chat.id);
+    });
+
+    this.bot.onText(/\/status/, async (msg: TelegramBot.Message) => {
+      await this.registerUserFromMessage(msg);
+      if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+        await this.botInstance.sendMessageToUser(msg.chat.id, 'El módulo de finanzas no está disponible.');
+        return;
+      }
+      await this.financeHandler.showConfigReview(msg.chat.id);
     });
   }
 
