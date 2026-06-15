@@ -21,14 +21,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Generate yarn.lock
-        run: yarn install --mode update-lockfile
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
