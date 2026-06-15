@@ -3,20 +3,22 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+RUN corepack enable && corepack prepare pnpm@11.5.1 --activate
+
 # Copy package files
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install ALL dependencies (needed for build)
-RUN yarn install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Generate Prisma Client
-RUN yarn db:init
+RUN pnpm db:init
 
 # Build the application
-RUN yarn build
+RUN pnpm build
 
 # Production stage
 FROM node:20-alpine
@@ -24,14 +26,14 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install curl for healthcheck
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl && corepack enable && corepack prepare pnpm@11.5.1 --activate
 
 # Copy package files
-COPY package.json yarn.lock ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install ONLY production dependencies
-RUN yarn install --frozen-lockfile --production && \
-    yarn cache clean
+RUN pnpm install --frozen-lockfile --prod && \
+    pnpm store prune
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist

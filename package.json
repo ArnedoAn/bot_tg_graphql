@@ -5,6 +5,7 @@
   "author": "Andrés Arnedo",
   "private": true,
   "license": "UNLICENSED",
+  "packageManager": "pnpm@11.5.1",
   "scripts": {
     "db:init": "prisma generate",
     "build": "nest build",
