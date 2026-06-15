@@ -6,7 +6,7 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.5.1 --activate
 
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install ALL dependencies (needed for build)
 RUN pnpm install --frozen-lockfile
@@ -29,7 +29,7 @@ WORKDIR /app
 RUN apk add --no-cache curl && corepack enable && corepack prepare pnpm@11.5.1 --activate
 
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install ONLY production dependencies
 RUN pnpm install --frozen-lockfile --prod && \
