@@ -406,4 +406,28 @@ export class FinanceBatchHandler {
   async batchProcessHandler(msg: TelegramBot.Message) {
     await this.initDateSelector(msg.chat.id, undefined, false);
   }
+
+  async handleCallback(
+    chatId: number,
+    action: string,
+    messageId?: number,
+  ): Promise<boolean> {
+    if (action.startsWith('cal_')) {
+      await this.handleCalendarNavigation(chatId, action, messageId);
+      return true;
+    }
+    if (action.startsWith('date_')) {
+      await this.handleDateSelection(chatId, action, messageId);
+      return true;
+    }
+    if (action === 'batch' || action === 'batch_process') {
+      await this.initDateSelector(chatId, messageId, false);
+      return true;
+    }
+    if (action === 'dryrun') {
+      await this.initDateSelector(chatId, messageId, true);
+      return true;
+    }
+    return false;
+  }
 }

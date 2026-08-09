@@ -851,4 +851,51 @@ export class FinanceWizardHandler {
       },
     );
   }
+
+  async handleCallback(
+    chatId: number,
+    action: string,
+    messageId?: number,
+  ): Promise<boolean> {
+    if (
+      action === 'wizard' ||
+      action === 'review_setup' ||
+      action === 'ops_menu' ||
+      action.startsWith('wiz_')
+    ) {
+      if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
+        return true;
+      }
+      if (action === 'review_setup') {
+        if (
+          !(await sectionOnHelper(
+            this.featureFlags,
+            FEATURE_FLAGS.FINANCE_SECTION_REVIEW,
+          ))
+        ) {
+          await editOrSendHelper(
+            this.bot,
+            chatId,
+            messageId,
+            'Esta sección no está disponible.',
+            [[{ text: '🔙 Volver', callback_data: 'menu:finance' }]],
+          );
+          return true;
+        }
+        await this.showConfigReview(chatId, messageId);
+        return true;
+      }
+      if (action === 'ops_menu') {
+        await this.showSimpleOperationsMenu(chatId, messageId);
+        return true;
+      }
+      if (action === 'wizard') {
+        await this.openFinanceWizard(chatId, messageId);
+        return true;
+      }
+      await this.handleWizardAction(chatId, action, messageId);
+      return true;
+    }
+    return false;
+  }
 }

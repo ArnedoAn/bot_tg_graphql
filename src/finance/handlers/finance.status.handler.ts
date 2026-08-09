@@ -591,4 +591,50 @@ export class FinanceStatusHandler {
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
+
+  async handleCallback(
+    chatId: number,
+    action: string,
+    messageId?: number,
+  ): Promise<boolean> {
+    switch (action) {
+      case 'stats':
+        await this.showStatistics(chatId, messageId);
+        return true;
+      case 'audit':
+        await this.showAuditLogs(chatId, messageId);
+        return true;
+      case 'gmail_status':
+        await this.showGmailStatus(chatId, messageId);
+        return true;
+      case 'gmail_reconnect':
+        await this.showGmailReconnect(chatId, messageId);
+        return true;
+      case 'health':
+        await this.showHealthCheck(chatId, messageId);
+        return true;
+      case 'show_user_id':
+        await this.showApiUserId(chatId, messageId);
+        return true;
+      case 'scheduler':
+        await this.showSchedulerStatus(chatId, messageId);
+        return true;
+      case 'retry':
+        await this.retryFailedAction(chatId, messageId);
+        return true;
+      case 'senders':
+        await this.showKnownSenders(chatId, messageId);
+        return true;
+      case 'learn':
+        await this.learnSendersAction(chatId, messageId);
+        return true;
+      case 'sync':
+        await this.syncFireflyAction(chatId, messageId);
+        return true;
+      case 'noop':
+        return true;
+      default:
+        return false;
+    }
+  }
 }
