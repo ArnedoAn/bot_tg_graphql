@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import TelegramBot, { InlineKeyboardButton } from 'node-telegram-bot-api';
 import { BotService } from '../../shared/instances/bot.service';
 import { UserMenuModeService } from '../../shared/instances/user-menu-mode.service';
@@ -16,9 +16,7 @@ import { FEATURE_FLAGS } from '../../shared/constants/feature-flag-keys';
 
 @Injectable()
 export class FinanceHandler {
-  private readonly logger = new Logger(FinanceHandler.name);
   private readonly bot: TelegramBot;
-  private readonly errorMessage = 'Ha ocurrido un error inesperado';
 
   constructor(
     private readonly botInstance: BotService,

@@ -29,7 +29,6 @@ import {
 @Injectable()
 export class FinanceWizardHandler {
   private readonly bot: TelegramBot;
-  private readonly errorMessage = 'Ha ocurrido un error inesperado';
 
   /** Tras configurar token desde el asistente, volver al flujo del tutorial */
   private readonly wizardAfterToken: Set<number> = new Set();

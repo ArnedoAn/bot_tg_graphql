@@ -18,7 +18,6 @@ import {
 @Injectable()
 export class FinanceBatchHandler {
   private readonly bot: TelegramBot;
-  private readonly errorMessage = 'Ha ocurrido un error inesperado';
 
   // Store user state for date selection
   private userDateState: Map<

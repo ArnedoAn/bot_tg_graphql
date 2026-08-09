@@ -12,7 +12,6 @@ import {
 @Injectable()
 export class FinanceStatusHandler {
   private readonly bot: TelegramBot;
-  private readonly errorMessage = 'Ha ocurrido un error inesperado';
 
   constructor(
     private readonly financeService: FinanceService,
