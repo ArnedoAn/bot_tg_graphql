@@ -33,6 +33,7 @@ import {
 } from './finance.helpers';
 import { BotAssetService } from '../../shared/prisma/bot-asset.service';
 import { FinanceWizardHandler } from './finance.wizard.handler';
+import { FinanceBatchHandler } from './finance.batch.handler';
 import { FEATURE_FLAGS } from '../../shared/constants/feature-flag-keys';
 
 @Injectable()
@@ -40,12 +41,6 @@ export class FinanceHandler {
   private readonly logger = new Logger(FinanceHandler.name);
   private readonly bot: TelegramBot;
   private readonly errorMessage = 'Ha ocurrido un error inesperado';
-
-  // Store user state for date selection
-  private userDateState: Map<
-    number,
-    { year: number; month: number; dryRun: boolean }
-  > = new Map();
 
   constructor(
     private readonly financeService: FinanceService,
@@ -57,6 +52,7 @@ export class FinanceHandler {
     private readonly userService: UserService,
     private readonly configService: ConfigService,
     private readonly wizardHandler: FinanceWizardHandler,
+    private readonly batchHandler: FinanceBatchHandler,
   ) {
     this.bot = this.botInstance.getBot();
   }
@@ -350,346 +346,23 @@ export class FinanceHandler {
     messageId: number | undefined,
     dryRun: boolean,
   ): Promise<void> {
-    const now = new Date();
-    this.userDateState.set(chatId, {
-      year: now.getFullYear(),
-      month: now.getMonth(),
-      dryRun,
-    });
-
-    await this.showDateSelector(chatId, messageId, dryRun);
+    return this.batchHandler.initDateSelector(chatId, messageId, dryRun);
   }
 
-  /**
-   * Generate calendar keyboard for date selection
-   */
-  private generateCalendarKeyboard(
-    year: number,
-    month: number,
-    dryRun: boolean,
-  ): InlineKeyboardButton[][] {
-    const keyboard: InlineKeyboardButton[][] = [];
-    const months = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-    ];
-
-    // Header with month/year navigation
-    keyboard.push([
-      { text: '◀️', callback_data: `finance:cal_prev_${year}_${month}` },
-      { text: `${months[month]} ${year}`, callback_data: 'finance:noop' },
-      { text: '▶️', callback_data: `finance:cal_next_${year}_${month}` },
-    ]);
-
-    // Day headers
-    keyboard.push([
-      { text: 'Lu', callback_data: 'finance:noop' },
-      { text: 'Ma', callback_data: 'finance:noop' },
-      { text: 'Mi', callback_data: 'finance:noop' },
-      { text: 'Ju', callback_data: 'finance:noop' },
-      { text: 'Vi', callback_data: 'finance:noop' },
-      { text: 'Sa', callback_data: 'finance:noop' },
-      { text: 'Do', callback_data: 'finance:noop' },
-    ]);
-
-    // Days
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startingDay = (firstDay.getDay() + 6) % 7; // Monday = 0
-
-    let week: InlineKeyboardButton[] = [];
-    // Empty cells before first day
-    for (let i = 0; i < startingDay; i++) {
-      week.push({ text: ' ', callback_data: 'finance:noop' });
-    }
-
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      week.push({
-        text: String(day),
-        callback_data: `finance:date_${dateStr}_${dryRun ? 'dry' : 'live'}`,
-      });
-
-      if (week.length === 7) {
-        keyboard.push(week);
-        week = [];
-      }
-    }
-
-    // Fill remaining days
-    if (week.length > 0) {
-      while (week.length < 7) {
-        week.push({ text: ' ', callback_data: 'finance:noop' });
-      }
-      keyboard.push(week);
-    }
-
-    // Quick options
-    keyboard.push([
-      {
-        text: '📅 Ayer',
-        callback_data: `finance:date_yesterday_${dryRun ? 'dry' : 'live'}`,
-      },
-      {
-        text: '📅 Última semana',
-        callback_data: `finance:date_lastweek_${dryRun ? 'dry' : 'live'}`,
-      },
-    ]);
-
-    keyboard.push([{ text: '🔙 Volver', callback_data: 'menu:finance' }]);
-
-    return keyboard;
-  }
-
-  /**
-   * Show date selector
-   */
-  private async showDateSelector(
-    chatId: number,
-    messageId: number | undefined,
-    dryRun: boolean,
-  ): Promise<void> {
-    const adv = await this.isAdvanced(chatId);
-    const state = this.userDateState.get(chatId);
-    const year = state?.year || new Date().getFullYear();
-    const month = state?.month || new Date().getMonth();
-
-    const mode = dryRun ? '🔍 Modo Prueba' : '🚀 Modo Real';
-    const dateHint = adv
-      ? '📅 Desde qué fecha quieres procesar correos:'
-      : '📅 Desde qué fecha quieres incluir movimientos de tus correos:';
-    const text = adv
-      ? `${this.financeTitle(adv)}\n\n${mode}\n\n${dateHint}`
-      : `${this.financeTitle(adv)}\n\n${dateHint}`;
-
-    const options = {
-      parse_mode: 'Markdown' as const,
-      reply_markup: {
-        inline_keyboard: this.generateCalendarKeyboard(year, month, dryRun),
-      },
-    };
-
-    if (messageId) {
-      await this.bot.editMessageText(text, {
-        chat_id: chatId,
-        message_id: messageId,
-        ...options,
-      });
-    } else {
-      await this.bot.sendMessage(chatId, text, options);
-    }
-  }
-
-  /**
-   * Handle calendar navigation
-   */
   private async handleCalendarNavigation(
     chatId: number,
     action: string,
     messageId?: number,
   ): Promise<void> {
-    if (action === 'noop') return;
-
-    const state = this.userDateState.get(chatId);
-    if (!state) return;
-
-    if (action.startsWith('cal_prev_')) {
-      const parts = action.split('_');
-      state.year = parseInt(parts[2]);
-      state.month = parseInt(parts[3]) - 1;
-      if (state.month < 0) {
-        state.month = 11;
-        state.year--;
-      }
-    } else if (action.startsWith('cal_next_')) {
-      const parts = action.split('_');
-      state.year = parseInt(parts[2]);
-      state.month = parseInt(parts[3]) + 1;
-      if (state.month > 11) {
-        state.month = 0;
-        state.year++;
-      }
-    }
-
-    this.userDateState.set(chatId, state);
-    await this.showDateSelector(chatId, messageId, state.dryRun);
+    await this.batchHandler.handleCalendarNavigation(chatId, action, messageId);
   }
 
-  /**
-   * Handle date selection and launch batch processing
-   */
   private async handleDateSelection(
     chatId: number,
     action: string,
     messageId?: number,
   ): Promise<void> {
-    const parts = action.replace('date_', '').split('_');
-    let dryRun = parts[parts.length - 1] === 'dry';
-    if (!(await this.isAdvanced(chatId))) {
-      dryRun = false;
-    }
-    const dateParam = parts.slice(0, -1).join('_');
-
-    let afterDate: string;
-    if (dateParam === 'yesterday') {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      afterDate = this.financeService.formatDate(yesterday);
-    } else if (dateParam === 'lastweek') {
-      const lastWeek = new Date();
-      lastWeek.setDate(lastWeek.getDate() - 7);
-      afterDate = this.financeService.formatDate(lastWeek);
-    } else {
-      afterDate = dateParam;
-    }
-
-    await this.launchBatchAction(chatId, messageId, afterDate, dryRun);
-  }
-
-  /**
-   * Launch batch processing action
-   */
-  private async launchBatchAction(
-    chatId: number,
-    messageId: number | undefined,
-    afterDate: string,
-    dryRun: boolean,
-  ): Promise<void> {
-    const adv = await this.isAdvanced(chatId);
-    const mode = dryRun ? '🔍 Modo Prueba' : '🚀 Modo Real';
-    const loadingText = adv
-      ? `${this.financeTitle(adv)}\n\n${mode}\n\n⏳ Encolando procesamiento desde ${afterDate}...`
-      : `${this.financeTitle(adv)}\n\n⏳ Preparando el proceso desde *${afterDate}*...`;
-
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    } else {
-      await this.bot.sendMessage(chatId, loadingText, { parse_mode: 'Markdown' });
-    }
-
-    const result = await this.financeService.launchBatchProcessing(
-      this.getUserId(chatId),
-      afterDate,
-      200,
-      dryRun,
-    );
-
-    if (!result.success) {
-      const text = adv
-        ? `${this.financeTitle(adv)}\n\n❌ Error al encolar job: ${result.result}`
-        : `${this.financeTitle(adv)}\n\n❌ No se pudo iniciar el proceso. Intenta de nuevo o más tarde.\n\n_Detalle: ${result.result}_`;
-      const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
-      await this.editOrSend(chatId, messageId, text, keyboard);
-      return;
-    }
-
-    const enqueueData = result.result as BatchProcessingJobEnqueueResponse;
-    const jobId = enqueueData.job_id;
-    const pollEverySeconds = 3;
-    const queuedText = adv
-      ? `${this.financeTitle(adv)}\n\n` +
-        `${mode}\n\n` +
-        `🕒 *Job encolado*\n` +
-        `• Job ID: \`${jobId}\`\n` +
-        `• Estado inicial: ${enqueueData.status}\n\n` +
-        `Voy a monitorearlo y te aviso cuando termine.\n` +
-        `⏱️ Polling cada ${pollEverySeconds}s`
-      : `${this.financeTitle(adv)}\n\n` +
-        `✅ Tu proceso ya está en cola. Te avisaré aquí cuando termine.\n\n` +
-        `_Si tarda mucho, no cierres Telegram._`;
-
-    const keyboard = [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]];
-    await this.editOrSend(chatId, messageId, queuedText, keyboard);
-
-    void this.pollBatchJobAndNotify(chatId, jobId, mode);
-  }
-
-  private async pollBatchJobAndNotify(
-    chatId: number,
-    jobId: string,
-    modeLabel: string,
-  ): Promise<void> {
-    const adv = await this.isAdvanced(chatId);
-    const maxAttempts = 120;
-    const intervalMs = 3000;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      await this.sleep(intervalMs);
-
-      const jobResult = await this.financeService.getProcessingJobStatus(
-        this.getUserId(chatId),
-        jobId,
-      );
-
-      if (!jobResult.success) {
-        if (attempt % 10 !== 0) continue;
-        const pollErr = adv
-          ? `${this.financeTitle(adv)}\n\n⚠️ No pude consultar el estado del job \`${jobId}\`.\nIntento ${attempt}/${maxAttempts}.`
-          : `${this.financeTitle(adv)}\n\n⚠️ No pude comprobar el avance del proceso. Sigo intentando… (${attempt}/${maxAttempts})`;
-        await this.bot.sendMessage(chatId, pollErr, { parse_mode: 'Markdown' });
-        continue;
-      }
-
-      const job = jobResult.result as ProcessingJobStatusResponse;
-      if (job.status === 'queued' || job.status === 'running') continue;
-
-      if (job.status === 'failed') {
-        const failText = adv
-          ? `${this.financeTitle(adv)}\n\n${modeLabel}\n\n❌ *Job falló*\n• Job ID: \`${jobId}\`\n• Error: ${job.error_message || 'Sin detalle'}`
-          : `${this.financeTitle(adv)}\n\n❌ *No se pudo completar el proceso*\n\n${job.error_message || 'Error desconocido. Intenta de nuevo o revisa Gmail y Firefly.'}`;
-        await this.bot.sendMessage(chatId, failText, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
-          },
-        });
-        return;
-      }
-
-      if (job.status === 'completed') {
-        const data = (job.result || {}) as BatchProcessingResponse;
-        const text = adv
-          ? `${this.financeTitle(adv)}\n\n` +
-            `${modeLabel}\n\n` +
-            `✅ *Trabajo terminado*\n\n` +
-            `• Job ID: \`${jobId}\`\n` +
-            `• Total emails: ${data.total_emails ?? 0}\n` +
-            `• Procesados: ${data.processed ?? 0}\n` +
-            `• Creados: ${data.created ?? 0}\n` +
-            `• Omitidos: ${data.skipped ?? 0}\n` +
-            `• Fallidos: ${data.failed ?? 0}\n` +
-            `• Tiempo: ${data.processing_time_ms ?? 0}ms`
-          : `${this.financeTitle(adv)}\n\n` +
-            `✅ *Listo*\n\n` +
-            `• Correos revisados: ${data.total_emails ?? 0}\n` +
-            `• Movimientos registrados (nuevos): ${data.created ?? 0}\n` +
-            `• Sin cambios / ya estaban: ${data.skipped ?? 0}\n` +
-            `• Con error: ${data.failed ?? 0}\n\n` +
-            `_Tiempo aproximado: ${data.processing_time_ms ?? 0} ms_`;
-
-        await this.bot.sendMessage(chatId, text, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
-          },
-        });
-        return;
-      }
-    }
-
-    const timeoutText = adv
-      ? `${this.financeTitle(adv)}\n\n⏰ El job \`${jobId}\` sigue en progreso o no respondió a tiempo.\nPuedes intentar nuevamente desde el menú.`
-      : `${this.financeTitle(adv)}\n\n⏰ El proceso sigue tardando o no hubo respuesta a tiempo. Prueba otra vez desde *Finanzas* más tarde.`;
-    await this.bot.sendMessage(chatId, timeoutText, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [[{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }]],
-      },
-    });
+    await this.batchHandler.handleDateSelection(chatId, action, messageId);
   }
 
   /**
@@ -1226,6 +899,6 @@ export class FinanceHandler {
 
   // Legacy handlers for direct commands
   async batchProcessHandler(msg: TelegramBot.Message) {
-    await this.initDateSelector(msg.chat.id, undefined, false);
+    await this.batchHandler.batchProcessHandler(msg);
   }
 }

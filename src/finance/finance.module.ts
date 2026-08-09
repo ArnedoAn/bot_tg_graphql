@@ -4,6 +4,7 @@ import { FinanceService } from './finance.service';
 import { SharedModule } from '../shared/shared.module';
 import { FinanceHandler } from './handlers/finance.handler';
 import { FinanceWizardHandler } from './handlers/finance.wizard.handler';
+import { FinanceBatchHandler } from './handlers/finance.batch.handler';
 import { FinanceStatusCronService } from './finance-status-cron.service';
 
 @Module({
@@ -11,6 +12,7 @@ import { FinanceStatusCronService } from './finance-status-cron.service';
     FinanceService,
     FinanceHandler,
     FinanceWizardHandler,
+    FinanceBatchHandler,
     FinanceStatusCronService,
   ],
   exports: [FinanceHandler, FinanceStatusCronService],
