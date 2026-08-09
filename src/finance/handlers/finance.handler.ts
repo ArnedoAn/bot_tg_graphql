@@ -16,6 +16,18 @@ import {
   FinanceWizardStep,
   FINANCE_WIZARD_STEPS,
 } from '../../shared/prisma/finance-onboarding.service';
+import {
+  onboardingUrls,
+  financeTitle as financeTitleHelper,
+  getUserId as getUserIdHelper,
+  sleep as sleepHelper,
+  sectionOn as sectionOnHelper,
+  isGoogleTestingMode as isGoogleTestingModeHelper,
+  buildProgressBar as buildProgressBarHelper,
+  wizardNavKeyboard as wizardNavKeyboardHelper,
+  isValidEmail as isValidEmailHelper,
+  editOrSend as editOrSendHelper,
+} from './finance.helpers';
 import { BotAssetService } from '../../shared/prisma/bot-asset.service';
 import { FEATURE_FLAGS } from '../../shared/constants/feature-flag-keys';
 
@@ -24,14 +36,6 @@ export class FinanceHandler {
   private readonly logger = new Logger(FinanceHandler.name);
   private readonly bot: TelegramBot;
   private readonly errorMessage = 'Ha ocurrido un error inesperado';
-
-  /** Instancia Firefly del usuario y UI Finance (onboarding). */
-  private readonly onboardingUrls = {
-    fireflyHome: 'https://finance-fly.toothless.codes/',
-    fireflyProfile: 'https://finance-fly.toothless.codes/profile',
-    financeWeb: 'https://finance.toothless.codes/',
-    financeSetup: 'https://finance.toothless.codes/settings/setup',
-  } as const;
 
   // Store user state for date selection
   private userDateState: Map<
@@ -61,23 +65,23 @@ export class FinanceHandler {
 
   /** Título de sección según perfil */
   private financeTitle(advanced: boolean): string {
-    return advanced ? '💰 *Finance Analyzer*' : '💰 *Finanzas*';
+    return financeTitleHelper(advanced);
   }
 
   private getUserId(chatId: number): string {
-    return chatId.toString();
+    return getUserIdHelper(chatId);
   }
 
   private async sleep(ms: number): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, ms));
+    await sleepHelper(ms);
   }
 
   private async sectionOn(key: (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS]): Promise<boolean> {
-    return this.featureFlags.isEnabled(key);
+    return sectionOnHelper(this.featureFlags, key);
   }
 
   private isGoogleTestingMode(): boolean {
-    return this.configService.get<string>('GOOGLE_TESTING_MODE', 'false').toLowerCase() === 'true';
+    return isGoogleTestingModeHelper(this.configService);
   }
 
   private buildProgressBar(
@@ -89,23 +93,7 @@ export class FinanceHandler {
       apkManualDone: boolean;
     },
   ): string {
-    const items: { key: FinanceWizardStep; done: boolean }[] = [
-      { key: 'firefly_signup', done: prog.fireflyTokenDone },
-      { key: 'firefly_token', done: prog.fireflyTokenDone },
-      { key: 'gmail', done: prog.gmailDone },
-      { key: 'web_ui', done: prog.webUiDone },
-      { key: 'apk', done: prog.apkManualDone },
-    ];
-    let activeIndex = items.findIndex((x) => x.key === step);
-    if (step === 'start') activeIndex = 0;
-    if (step === 'complete') activeIndex = items.length;
-    const icons = items.map((x, i) => {
-      if (x.done) return '✅';
-      if (step !== 'complete' && i === activeIndex) return '🔵';
-      return '⚪';
-    });
-    const label = step === 'complete' ? items.length : Math.min(activeIndex + 1, items.length);
-    return `${icons.join(' ')}  _(${label}/${items.length})_\n\n`;
+    return buildProgressBarHelper(step, prog);
   }
 
   /**
@@ -321,19 +309,7 @@ export class FinanceHandler {
     step: FinanceWizardStep,
     opts?: { showNext?: boolean; showBack?: boolean },
   ): InlineKeyboardButton[][] {
-    const rows: InlineKeyboardButton[][] = [];
-    const showNext = opts?.showNext !== false;
-    const showBack = opts?.showBack !== false;
-    const nav: InlineKeyboardButton[] = [];
-    if (showBack) {
-      nav.push({ text: '⬅️ Paso anterior', callback_data: 'finance:wiz_back' });
-    }
-    if (showNext) {
-      nav.push({ text: 'Siguiente paso ➡️', callback_data: 'finance:wiz_next' });
-    }
-    if (nav.length) rows.push(nav);
-    rows.push([{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }]);
-    return rows;
+    return wizardNavKeyboardHelper(step, opts);
   }
 
   private async showSimpleOperationsMenu(
@@ -502,8 +478,7 @@ export class FinanceHandler {
   }
 
   private isValidEmail(raw: string): boolean {
-    const s = raw.trim();
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    return isValidEmailHelper(raw);
   }
 
   /**
@@ -668,9 +643,9 @@ export class FinanceHandler {
         text =
           `${this.financeTitle(adv)}\n\n🎓 *Configurar finanzas*\n\n` +
           'Te guío en pocos pasos: cuenta en *Firefly* (' +
-          this.onboardingUrls.fireflyHome +
+          onboardingUrls.fireflyHome +
           '), token en el bot, *Gmail*, la *web* de Finanzas (' +
-          this.onboardingUrls.financeWeb +
+          onboardingUrls.financeWeb +
           ') y, si quieres, la *app APK*.\n\n' +
           'Puedes parar y seguir más tarde: guardamos tu último paso.';
         keyboard = this.wizardNavKeyboard('start', { showBack: false });
@@ -680,15 +655,15 @@ export class FinanceHandler {
           `${this.financeTitle(adv)}\n\n` +
           '📝 *Paso 1 — Cuenta en Firefly*\n\n' +
           '1. Entra a *tu instancia* y crea cuenta o inicia sesión:\n' +
-          this.onboardingUrls.fireflyHome +
+          onboardingUrls.fireflyHome +
           '\n' +
           '2. Luego abre *Perfil* para gestionar tu usuario y, más adelante, el *token personal* (PAT):\n' +
-          this.onboardingUrls.fireflyProfile +
+          onboardingUrls.fireflyProfile +
           '\n\n' +
           '_En el siguiente paso pegarás el PAT en el bot. Si aún no lo creas, puedes hacerlo en Perfil → OAuth / tokens (según tu pantalla de Firefly)._';
         keyboard = [
-          [{ text: '🏠 Abrir Firefly (inicio)', url: this.onboardingUrls.fireflyHome }],
-          [{ text: '👤 Perfil (cuenta y token)', url: this.onboardingUrls.fireflyProfile }],
+          [{ text: '🏠 Abrir Firefly (inicio)', url: onboardingUrls.fireflyHome }],
+          [{ text: '👤 Perfil (cuenta y token)', url: onboardingUrls.fireflyProfile }],
           ...this.wizardNavKeyboard('firefly_signup'),
         ];
         break;
@@ -697,13 +672,13 @@ export class FinanceHandler {
           `${this.financeTitle(adv)}\n\n` +
           '🔑 *Paso 2 — Token en el bot*\n\n' +
           'Genera o copia tu *token personal (PAT)* desde Firefly:\n' +
-          this.onboardingUrls.fireflyProfile +
+          onboardingUrls.fireflyProfile +
           '\n\n' +
           'Pulsa *Pegar token* y responde al mensaje que te envío. ' +
           'El mensaje con tu token se borrará al procesarlo cuando Telegram lo permita.\n\n' +
           'Si ya lo configuraste antes, usa *Verificar con la API*.';
         keyboard = [
-          [{ text: '🔑 Abrir Firefly → perfil / token', url: this.onboardingUrls.fireflyProfile }],
+          [{ text: '🔑 Abrir Firefly → perfil / token', url: onboardingUrls.fireflyProfile }],
           [
             { text: '✍️ Pegar token', callback_data: 'finance:wiz_token' },
             { text: '✅ Verificar con la API', callback_data: 'finance:wiz_verify_firefly' },
@@ -779,7 +754,7 @@ export class FinanceHandler {
           'Así tendrás la app como un icono en el móvil, sin tienda.\n\n' +
           '*Android (Chrome)*\n' +
           '1. Abre la web en Chrome: ' +
-          this.onboardingUrls.financeWeb +
+          onboardingUrls.financeWeb +
           '\n' +
           '2. Menú ⋮ → *Instalar aplicación* o *Añadir a la pantalla de inicio* (el nombre puede variar).\n' +
           '3. Confirma; quedará un acceso directo como una app.\n\n' +
@@ -789,12 +764,12 @@ export class FinanceHandler {
           '3. *Añadir a la pantalla de Inicio* → *Añadir*.\n\n' +
           '*Pegar el mismo PAT en la web*\n' +
           'En configuración, campo *personal access token*, usa el mismo token que en el bot:\n' +
-          this.onboardingUrls.financeSetup +
+          onboardingUrls.financeSetup +
           '\n\n' +
           'Cuando lo hayas hecho, pulsa *Ya lo configuré*.';
         keyboard = [
-          [{ text: '🌐 Abrir Finance (web)', url: this.onboardingUrls.financeWeb }],
-          [{ text: '⚙️ Configuración (pegar token)', url: this.onboardingUrls.financeSetup }],
+          [{ text: '🌐 Abrir Finance (web)', url: onboardingUrls.financeWeb }],
+          [{ text: '⚙️ Configuración (pegar token)', url: onboardingUrls.financeSetup }],
           [{ text: '✅ Ya lo configuré', callback_data: 'finance:wiz_web_done' }],
           ...this.wizardNavKeyboard('web_ui'),
         ];
@@ -1844,15 +1819,15 @@ export class FinanceHandler {
     if (messageId) {
       await this.bot.editMessageText(
         adv
-          ? `${this.financeTitle(adv)}\n\n🔑 Ingresa tu token de Firefly III (PAT):\n\n_${this.onboardingUrls.fireflyProfile}_`
-          : `${this.financeTitle(adv)}\n\n🔑 *Token de acceso de Firefly*\n\nCópialo desde tu perfil:\n${this.onboardingUrls.fireflyProfile}`,
+          ? `${this.financeTitle(adv)}\n\n🔑 Ingresa tu token de Firefly III (PAT):\n\n_${onboardingUrls.fireflyProfile}_`
+          : `${this.financeTitle(adv)}\n\n🔑 *Token de acceso de Firefly*\n\nCópialo desde tu perfil:\n${onboardingUrls.fireflyProfile}`,
         {
           chat_id: chatId,
           message_id: messageId,
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
-              [{ text: '🔑 Abrir Firefly → perfil / token', url: this.onboardingUrls.fireflyProfile }],
+              [{ text: '🔑 Abrir Firefly → perfil / token', url: onboardingUrls.fireflyProfile }],
               [{ text: '🔙 Volver', callback_data: 'menu:finance' }],
             ],
           },
@@ -1863,8 +1838,8 @@ export class FinanceHandler {
     const promptMsg = await this.bot.sendMessage(
       chatId,
       adv
-        ? `✍️ Responde a este mensaje con tu PAT.\n\nOrigen: ${this.onboardingUrls.fireflyProfile}\n\n⚠️ *No compartas este token con nadie.*`
-        : `✍️ Responde a *este mensaje* pegando el token.\n\nLo sacas de: ${this.onboardingUrls.fireflyProfile}\n\n⚠️ *No lo compartas con nadie.*`,
+        ? `✍️ Responde a este mensaje con tu PAT.\n\nOrigen: ${onboardingUrls.fireflyProfile}\n\n⚠️ *No compartas este token con nadie.*`
+        : `✍️ Responde a *este mensaje* pegando el token.\n\nLo sacas de: ${onboardingUrls.fireflyProfile}\n\n⚠️ *No lo compartas con nadie.*`,
       {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -1951,20 +1926,7 @@ export class FinanceHandler {
     text: string,
     keyboard: InlineKeyboardButton[][],
   ): Promise<void> {
-    const options = {
-      parse_mode: 'Markdown' as const,
-      reply_markup: { inline_keyboard: keyboard },
-    };
-
-    if (messageId) {
-      await this.bot.editMessageText(text, {
-        chat_id: chatId,
-        message_id: messageId,
-        ...options,
-      });
-    } else {
-      await this.bot.sendMessage(chatId, text, options);
-    }
+    await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
 
   // Legacy handlers for direct commands
