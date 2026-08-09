@@ -553,7 +553,7 @@ export class FinanceWizardHandler {
               '1. Pulsa *Enviar mi correo de Google* y escribe tu correo.\n' +
               '2. El administrador lo añadirá en Google Cloud Console.\n' +
               '3. Cuando te avise (o veas el botón *Verificar estado* activo), continuarás con el enlace OAuth aquí.\n\n' +
-              '_Hasta entonces no uses "Abrir OAuth": fallará si tu correo no está en la lista._';
+              '_Hasta entonces no uses “Abrir OAuth”: fallará si tu correo no está en la lista._';
             keyboard = [
               [
                 {
@@ -629,7 +629,7 @@ export class FinanceWizardHandler {
           '2. Menú ⋮ → *Instalar aplicación* o *Añadir a la pantalla de inicio* (el nombre puede variar).\n' +
           '3. Confirma; quedará un acceso directo como una app.\n\n' +
           '*iPhone o iPad (Safari)*\n' +
-          '1. Abre el enlace en *Safari* (si hace falta, "Abrir en Safari" desde el menú del navegador).\n' +
+          '1. Abre el enlace en *Safari* (si hace falta, “Abrir en Safari” desde el menú del navegador).\n' +
           '2. Pulsa *Compartir* .\n' +
           '3. *Añadir a la pantalla de Inicio* → *Añadir*.\n\n' +
           '*Pegar el mismo PAT en la web*\n' +
