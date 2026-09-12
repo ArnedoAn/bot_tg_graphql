@@ -7,21 +7,14 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AppService } from './app.service';
 import { BotService } from './shared/instances/bot.service';
 
 @Controller()
 export class AppController {
   constructor(
-    private readonly appService: AppService,
     private readonly botService: BotService,
     private readonly configService: ConfigService,
   ) {}
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
 
   @Get('health')
   health(): { status: string; timestamp: string } {
