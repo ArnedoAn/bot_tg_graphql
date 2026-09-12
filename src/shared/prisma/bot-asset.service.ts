@@ -6,7 +6,10 @@ import { BOT_ASSET_FINANCE_APK } from '../constants/feature-flag-keys';
 export class BotAssetService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getFinanceApk(): Promise<{ fileId: string; fileUniqueId: string | null } | null> {
+  async getFinanceApk(): Promise<{
+    fileId: string;
+    fileUniqueId: string | null;
+  } | null> {
     const row = await this.prisma.botAsset.findUnique({
       where: { id: BOT_ASSET_FINANCE_APK },
     });

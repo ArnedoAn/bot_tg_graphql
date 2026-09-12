@@ -26,7 +26,8 @@ export const FEATURE_FLAGS = {
 
 export type FeatureFlagKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
 
-export const ALL_FEATURE_FLAG_KEYS: FeatureFlagKey[] = Object.values(FEATURE_FLAGS);
+export const ALL_FEATURE_FLAG_KEYS: FeatureFlagKey[] =
+  Object.values(FEATURE_FLAGS);
 
 /** ID fijo del registro de APK en bot_assets */
 export const BOT_ASSET_FINANCE_APK = 'finance_apk';

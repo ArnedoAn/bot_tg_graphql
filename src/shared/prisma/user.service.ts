@@ -28,7 +28,10 @@ export class UserService {
     return this.prisma.googleWhitelist.findUnique({ where: { userId } });
   }
 
-  async upsertWhitelistRequest(userId: string, email: string): Promise<GoogleWhitelist> {
+  async upsertWhitelistRequest(
+    userId: string,
+    email: string,
+  ): Promise<GoogleWhitelist> {
     return this.prisma.googleWhitelist.upsert({
       where: { userId },
       create: { userId, email, approved: false },
@@ -36,7 +39,10 @@ export class UserService {
     });
   }
 
-  async setWhitelistApproved(userId: string, approved: boolean): Promise<GoogleWhitelist> {
+  async setWhitelistApproved(
+    userId: string,
+    approved: boolean,
+  ): Promise<GoogleWhitelist> {
     return this.prisma.googleWhitelist.update({
       where: { userId },
       data: { approved },
@@ -54,7 +60,9 @@ export class UserService {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
-  async getIntegrationStatus(userId: string): Promise<UserIntegrationStatus | null> {
+  async getIntegrationStatus(
+    userId: string,
+  ): Promise<UserIntegrationStatus | null> {
     return this.prisma.userIntegrationStatus.findUnique({ where: { userId } });
   }
 
@@ -62,7 +70,9 @@ export class UserService {
   async getAllMonitoredUserIds(): Promise<string[]> {
     const [fromUsers, fromOnboarding] = await Promise.all([
       this.prisma.user.findMany({ select: { id: true } }),
-      this.prisma.financeOnboardingProgress.findMany({ select: { userId: true } }),
+      this.prisma.financeOnboardingProgress.findMany({
+        select: { userId: true },
+      }),
     ]);
     const set = new Set<string>();
     for (const u of fromUsers) set.add(u.id);
@@ -114,7 +124,8 @@ export class UserService {
         gmailConnected: gmailOk,
         fireflyConnected: fireflyOk,
         gmailEverConnected: (prev?.gmailEverConnected ?? false) || gmailOk,
-        fireflyEverConnected: (prev?.fireflyEverConnected ?? false) || fireflyOk,
+        fireflyEverConnected:
+          (prev?.fireflyEverConnected ?? false) || fireflyOk,
         lastCheckedAt: new Date(),
       },
     });

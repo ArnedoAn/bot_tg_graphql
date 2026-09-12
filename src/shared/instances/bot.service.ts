@@ -16,7 +16,10 @@ export class BotService {
   private async configureInternalMenu(): Promise<void> {
     try {
       await this.bot.setMyCommands([
-        { command: 'start', description: 'Inicia el bot y muestra el menu principal' },
+        {
+          command: 'start',
+          description: 'Inicia el bot y muestra el menu principal',
+        },
         { command: 'menu', description: 'Abre el menu principal' },
         { command: 'modo', description: 'Elegir menu simple o avanzado' },
         { command: 'finance', description: 'Abre el modulo de finanzas' },
@@ -24,7 +27,10 @@ export class BotService {
           command: 'configurar_finanzas',
           description: 'Asistente guiado para configurar Finanzas',
         },
-        { command: 'status', description: 'Ver estado de integraciones (Finanzas)' },
+        {
+          command: 'status',
+          description: 'Ver estado de integraciones (Finanzas)',
+        },
         { command: 'analyze', description: 'Procesa transacciones de emails' },
         { command: 'init', description: 'Registra tu tarjeta Transcaribe' },
         { command: 'saldo', description: 'Consulta saldo de Transcaribe' },
@@ -36,7 +42,9 @@ export class BotService {
 
       this.logger.log('Menu interno de comandos configurado');
     } catch (error) {
-      this.logger.warn(`No se pudo configurar el menu interno: ${error.message}`);
+      this.logger.warn(
+        `No se pudo configurar el menu interno: ${error.message}`,
+      );
     }
   }
 
@@ -76,7 +84,9 @@ export class BotService {
       this.bot.onReplyToMessage(chatId, message_id, (msgToReply) => {
         const text =
           msgToReply.text ??
-          ('caption' in msgToReply ? (msgToReply as TelegramBot.Message).caption : undefined);
+          ('caption' in msgToReply
+            ? (msgToReply as TelegramBot.Message).caption
+            : undefined);
         resolve({ text, replyMessageId: msgToReply.message_id });
       });
     });

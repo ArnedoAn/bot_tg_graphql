@@ -41,7 +41,8 @@ export class AdminHandler {
   private readonly logger = new Logger(AdminHandler.name);
   private readonly bot: TelegramBot;
   private readonly adminId: string;
-  private readonly unauthorizedMessage = '🔒 Solo el administrador puede usar el panel.';
+  private readonly unauthorizedMessage =
+    '🔒 Solo el administrador puede usar el panel.';
 
   constructor(
     private readonly botInstance: BotService,
@@ -63,7 +64,9 @@ export class AdminHandler {
     await this.botInstance.sendMessageToUser(chatId, this.unauthorizedMessage);
   }
 
-  private buildPanelKeyboard(states: Record<string, boolean>): InlineKeyboardButton[][] {
+  private buildPanelKeyboard(
+    states: Record<string, boolean>,
+  ): InlineKeyboardButton[][] {
     const rows: InlineKeyboardButton[][] = [];
     ALL_FEATURE_FLAG_KEYS.forEach((key, idx) => {
       const on = states[key] !== false;
@@ -79,11 +82,12 @@ export class AdminHandler {
       { text: '📊 Monitor de usuarios', callback_data: 'admin:cron_status' },
     ]);
     rows.push([
-      { text: '📧 Correos Gmail pendientes', callback_data: 'admin:pending_gmail' },
+      {
+        text: '📧 Correos Gmail pendientes',
+        callback_data: 'admin:pending_gmail',
+      },
     ]);
-    rows.push([
-      { text: '⬅️ Volver al menú', callback_data: 'menu:main' },
-    ]);
+    rows.push([{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }]);
     return rows;
   }
 
@@ -155,7 +159,10 @@ export class AdminHandler {
           `• Recordatorios onboarding: ${snap.onboardingRemindersSent}\n` +
           `• Duración: ${snap.elapsedMs} ms\n` +
           (snap.errors.length
-            ? `\n*Errores:*\n${snap.errors.slice(0, 8).map((e) => `• ${e}`).join('\n')}`
+            ? `\n*Errores:*\n${snap.errors
+                .slice(0, 8)
+                .map((e) => `• ${e}`)
+                .join('\n')}`
             : '')
         : '📊 *Monitor de usuarios*\n\n_Aún no hay ejecuciones registradas (el cron corre a las 08:00)._';
 
@@ -165,14 +172,18 @@ export class AdminHandler {
           message_id: messageId,
           parse_mode: 'Markdown',
           reply_markup: {
-            inline_keyboard: [[{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]],
+            inline_keyboard: [
+              [{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }],
+            ],
           },
         });
       } else {
         await this.botInstance.sendMessageToUser(chatId, text, {
           parse_mode: 'Markdown',
           reply_markup: {
-            inline_keyboard: [[{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]],
+            inline_keyboard: [
+              [{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }],
+            ],
           },
         });
       }
@@ -197,7 +208,9 @@ export class AdminHandler {
         ];
         keyboard.push(row);
       }
-      keyboard.push([{ text: '⬅️ Volver al panel', callback_data: 'admin:panel' }]);
+      keyboard.push([
+        { text: '⬅️ Volver al panel', callback_data: 'admin:panel' },
+      ]);
 
       if (messageId) {
         await this.bot.editMessageText(body, {
@@ -228,7 +241,12 @@ export class AdminHandler {
               parse_mode: 'Markdown',
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: '▶️ Continuar tutorial', callback_data: 'finance:wizard' }],
+                  [
+                    {
+                      text: '▶️ Continuar tutorial',
+                      callback_data: 'finance:wizard',
+                    },
+                  ],
                 ],
               },
             },

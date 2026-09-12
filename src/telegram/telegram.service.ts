@@ -35,20 +35,27 @@ export class TelegramService {
     this.setupCallbackHandlers();
   }
 
-  private async getMainMenuOptions(chatId: number): Promise<TelegramBot.InlineKeyboardButton[][]> {
+  private async getMainMenuOptions(
+    chatId: number,
+  ): Promise<TelegramBot.InlineKeyboardButton[][]> {
     const advanced = await this.userMenuMode.isAdvancedUser(chatId);
     const isAdmin = this.adminHandler.isAdmin(chatId);
     const launchSolo =
-      !isAdmin && (await this.featureFlags.isEnabled(FEATURE_FLAGS.FINANCE_LAUNCH_SOLO));
+      !isAdmin &&
+      (await this.featureFlags.isEnabled(FEATURE_FLAGS.FINANCE_LAUNCH_SOLO));
 
     const rows: TelegramBot.InlineKeyboardButton[][] = [];
 
     if (!launchSolo) {
       if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_TRANSCARIBE)) {
-        rows.push([{ text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' }]);
+        rows.push([
+          { text: '🚍 Transcaribe', callback_data: 'menu:transcaribe' },
+        ]);
       }
       if (await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_PICOYPLACA)) {
-        rows.push([{ text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' }]);
+        rows.push([
+          { text: '🚗 Pico y Placa', callback_data: 'menu:picoyplaca' },
+        ]);
       }
     }
 
@@ -83,7 +90,10 @@ export class TelegramService {
   }
 
   /** Primera vez o /modo: elegir simple vs avanzado */
-  private async showModePicker(chatId: number, messageId?: number): Promise<void> {
+  private async showModePicker(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
     const text =
       '🤖 *Modo del menú*\n\n' +
       '• *Menú simple*: solo lo necesario, textos claros en español.\n' +
@@ -113,7 +123,9 @@ export class TelegramService {
     }
   }
 
-  private async registerUserFromMessage(msg: TelegramBot.Message): Promise<void> {
+  private async registerUserFromMessage(
+    msg: TelegramBot.Message,
+  ): Promise<void> {
     const from = msg.from;
     await this.userService.upsertUser(String(msg.chat.id), {
       username: from?.username ?? undefined,
@@ -133,7 +145,10 @@ export class TelegramService {
     await this.showMainMenu(chatId);
   }
 
-  private async showMainMenu(chatId: number, messageId?: number): Promise<void> {
+  private async showMainMenu(
+    chatId: number,
+    messageId?: number,
+  ): Promise<void> {
     const advanced = await this.userMenuMode.isAdvancedUser(chatId);
     const intro = advanced
       ? '🤖 *Menú principal*\n\nElige un módulo:'
@@ -167,7 +182,11 @@ export class TelegramService {
 
       switch (module) {
         case 'menu':
-          await this.handleMenuNavigation(chatId, action, query.message.message_id);
+          await this.handleMenuNavigation(
+            chatId,
+            action,
+            query.message.message_id,
+          );
           break;
         case 'transcaribe':
           await this.transcaribeHandler.handleCallback(chatId, action);
@@ -195,10 +214,18 @@ export class TelegramService {
           await this.devopsHandler.handleCallback(chatId, action);
           break;
         case 'finance':
-          await this.financeHandler.handleCallback(chatId, action, query.message.message_id);
+          await this.financeHandler.handleCallback(
+            chatId,
+            action,
+            query.message.message_id,
+          );
           break;
         case 'admin':
-          await this.adminHandler.handleCallback(chatId, action, query.message.message_id);
+          await this.adminHandler.handleCallback(
+            chatId,
+            action,
+            query.message.message_id,
+          );
           break;
       }
     });
@@ -227,15 +254,25 @@ export class TelegramService {
         await this.showMainMenu(chatId, messageId);
         break;
       case 'transcaribe':
-        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_TRANSCARIBE))) {
-          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+        if (
+          !(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_TRANSCARIBE))
+        ) {
+          await this.botInstance.sendMessageToUser(
+            chatId,
+            'Este módulo no está disponible.',
+          );
           return;
         }
         await this.transcaribeHandler.showMenu(chatId);
         break;
       case 'picoyplaca':
-        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_PICOYPLACA))) {
-          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+        if (
+          !(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_PICOYPLACA))
+        ) {
+          await this.botInstance.sendMessageToUser(
+            chatId,
+            'Este módulo no está disponible.',
+          );
           return;
         }
         await this.picoyplacaHandler.showMenu(chatId);
@@ -258,14 +295,22 @@ export class TelegramService {
           return;
         }
         if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_DEVOPS))) {
-          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+          await this.botInstance.sendMessageToUser(
+            chatId,
+            'Este módulo no está disponible.',
+          );
           return;
         }
         await this.devopsHandler.showMenu(chatId);
         break;
       case 'finance':
-        if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
-          await this.botInstance.sendMessageToUser(chatId, 'Este módulo no está disponible.');
+        if (
+          !(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))
+        ) {
+          await this.botInstance.sendMessageToUser(
+            chatId,
+            'Este módulo no está disponible.',
+          );
           return;
         }
         await this.financeHandler.showMenu(chatId);
@@ -311,9 +356,13 @@ export class TelegramService {
         const name = (msg.document.file_name || '').toLowerCase();
         const mime = msg.document.mime_type || '';
         const isApk =
-          mime === 'application/vnd.android.package-archive' || name.endsWith('.apk');
+          mime === 'application/vnd.android.package-archive' ||
+          name.endsWith('.apk');
         if (!isApk) return;
-        await this.botAssets.setFinanceApk(msg.document.file_id, msg.document.file_unique_id);
+        await this.botAssets.setFinanceApk(
+          msg.document.file_id,
+          msg.document.file_unique_id,
+        );
         await this.botInstance.sendMessageToUser(
           msg.chat.id,
           '✅ *APK de Finanzas registrada.* Los usuarios podrán descargarla desde el tutorial.\n\n' +
@@ -336,15 +385,21 @@ export class TelegramService {
       await this.financeHandler.showMenu(msg.chat.id);
     });
 
-    this.bot.onText(/\/configurar_finanzas/, async (msg: TelegramBot.Message) => {
-      await this.registerUserFromMessage(msg);
-      await this.financeHandler.openFinanceWizard(msg.chat.id);
-    });
+    this.bot.onText(
+      /\/configurar_finanzas/,
+      async (msg: TelegramBot.Message) => {
+        await this.registerUserFromMessage(msg);
+        await this.financeHandler.openFinanceWizard(msg.chat.id);
+      },
+    );
 
     this.bot.onText(/\/status/, async (msg: TelegramBot.Message) => {
       await this.registerUserFromMessage(msg);
       if (!(await this.featureFlags.isEnabled(FEATURE_FLAGS.MODULE_FINANCE))) {
-        await this.botInstance.sendMessageToUser(msg.chat.id, 'El módulo de finanzas no está disponible.');
+        await this.botInstance.sendMessageToUser(
+          msg.chat.id,
+          'El módulo de finanzas no está disponible.',
+        );
         return;
       }
       await this.financeHandler.showConfigReview(msg.chat.id);

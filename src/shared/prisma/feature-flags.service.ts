@@ -1,6 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
-import { ALL_FEATURE_FLAG_KEYS, FeatureFlagKey } from '../constants/feature-flag-keys';
+import {
+  ALL_FEATURE_FLAG_KEYS,
+  FeatureFlagKey,
+} from '../constants/feature-flag-keys';
 
 @Injectable()
 export class FeatureFlagsService implements OnModuleInit {

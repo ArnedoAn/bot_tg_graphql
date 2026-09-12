@@ -19,7 +19,12 @@ export class PicoyplacaHandler {
 
   getMenuOptions(): TelegramBot.InlineKeyboardButton[][] {
     return [
-      [{ text: '🚦 Consultar Pico y Placa', callback_data: 'picoyplaca:consultar' }],
+      [
+        {
+          text: '🚦 Consultar Pico y Placa',
+          callback_data: 'picoyplaca:consultar',
+        },
+      ],
       [{ text: '🚗 Agregar Vehículo', callback_data: 'picoyplaca:add_car' }],
       [{ text: '📋 Mis Vehículos', callback_data: 'picoyplaca:all_cars' }],
       [{ text: '⬅️ Volver al menú', callback_data: 'menu:main' }],
@@ -80,10 +85,11 @@ export class PicoyplacaHandler {
         },
       );
 
-      const { text: vehicleName } = await this.botInstace.getOnReplyMessageResponse(
-        chatId,
-        firtMsg.message_id,
-      );
+      const { text: vehicleName } =
+        await this.botInstace.getOnReplyMessageResponse(
+          chatId,
+          firtMsg.message_id,
+        );
 
       if ((await this.pypService.vehicleExist(vehicleName, chatId)) === true) {
         await this.bot.sendMessage(
@@ -103,10 +109,11 @@ export class PicoyplacaHandler {
         },
       );
 
-      const { text: lastDigit } = await this.botInstace.getOnReplyMessageResponse(
-        chatId,
-        secondMsg.message_id,
-      );
+      const { text: lastDigit } =
+        await this.botInstace.getOnReplyMessageResponse(
+          chatId,
+          secondMsg.message_id,
+        );
 
       const vehicle: Vehicle = {
         id: 1,
@@ -129,10 +136,7 @@ export class PicoyplacaHandler {
       const vehicles = await this.pypService.getVehiclesByUser(chatId);
 
       if (vehicles === null) {
-        await this.bot.sendMessage(
-          chatId,
-          'No tienes vehículos registrados.',
-        );
+        await this.bot.sendMessage(chatId, 'No tienes vehículos registrados.');
         return;
       }
 

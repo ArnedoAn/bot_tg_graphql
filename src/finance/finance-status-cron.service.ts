@@ -63,12 +63,20 @@ export class FinanceStatusCronService {
     }
 
     const adminId = this.configService.get<string>('ADMIN_ID', '');
-    const delayMs = parseInt(this.configService.get<string>('CRON_DELAY_MS', '500'), 10) || 500;
-    const maxCycle = parseInt(this.configService.get<string>('CRON_MAX_USERS_PER_CYCLE', '0'), 10);
+    const delayMs =
+      parseInt(this.configService.get<string>('CRON_DELAY_MS', '500'), 10) ||
+      500;
+    const maxCycle = parseInt(
+      this.configService.get<string>('CRON_MAX_USERS_PER_CYCLE', '0'),
+      10,
+    );
     const notifyCooldownDays =
-      parseFloat(this.configService.get<string>('NOTIFY_COOLDOWN_DAYS', '3')) || 3;
+      parseFloat(this.configService.get<string>('NOTIFY_COOLDOWN_DAYS', '3')) ||
+      3;
     const onboardingStaleDays =
-      parseFloat(this.configService.get<string>('ONBOARDING_STALE_DAYS', '3')) || 3;
+      parseFloat(
+        this.configService.get<string>('ONBOARDING_STALE_DAYS', '3'),
+      ) || 3;
 
     const t0 = Date.now();
     const errors: string[] = [];
@@ -88,7 +96,8 @@ export class FinanceStatusCronService {
 
     try {
       const allIds = await this.userService.getAllMonitoredUserIds();
-      let toProcess = await this.userService.getUserIdsNeedingCheckToday(allIds);
+      let toProcess =
+        await this.userService.getUserIdsNeedingCheckToday(allIds);
       if (maxCycle > 0 && toProcess.length > maxCycle) {
         toProcess = toProcess.slice(0, maxCycle);
       }
@@ -101,21 +110,28 @@ export class FinanceStatusCronService {
         }
 
         try {
-          const [gmailR, fireflyR, prevStatus, userRow, prog] = await Promise.all([
-            this.financeService.getGmailAuthStatus(userId),
-            this.financeService.getFireflyStatus(userId),
-            this.userService.getIntegrationStatus(userId),
-            this.userService.getUserById(userId),
-            this.onboarding.getOrCreate(userId),
-          ]);
+          const [gmailR, fireflyR, prevStatus, userRow, prog] =
+            await Promise.all([
+              this.financeService.getGmailAuthStatus(userId),
+              this.financeService.getFireflyStatus(userId),
+              this.userService.getIntegrationStatus(userId),
+              this.userService.getUserById(userId),
+              this.onboarding.getOrCreate(userId),
+            ]);
 
           const gmailOk =
             gmailR.success &&
-            !!(gmailR.result as { gmail_authenticated?: boolean })?.gmail_authenticated;
+            !!(gmailR.result as { gmail_authenticated?: boolean })
+              ?.gmail_authenticated;
           const fireflyOk =
-            fireflyR.success && !!(fireflyR.result as { connected?: boolean })?.connected;
+            fireflyR.success &&
+            !!(fireflyR.result as { connected?: boolean })?.connected;
 
-          await this.userService.applyIntegrationCheckResult(userId, gmailOk, fireflyOk);
+          await this.userService.applyIntegrationCheckResult(
+            userId,
+            gmailOk,
+            fireflyOk,
+          );
           usersChecked++;
 
           const hasProblem = !gmailOk || !fireflyOk;
@@ -130,11 +146,17 @@ export class FinanceStatusCronService {
               fireflyOk,
             });
 
-            const canNotify = this.daysSince(prevStatus?.lastNotifiedAt) >= notifyCooldownDays;
+            const canNotify =
+              this.daysSince(prevStatus?.lastNotifiedAt) >= notifyCooldownDays;
             if (canNotify) {
               const gmailEver = prevStatus?.gmailEverConnected ?? false;
               const fireflyEver = prevStatus?.fireflyEverConnected ?? false;
-              const kb = this.buildProblemKeyboard(!gmailOk, !fireflyOk, gmailEver, fireflyEver);
+              const kb = this.buildProblemKeyboard(
+                !gmailOk,
+                !fireflyOk,
+                gmailEver,
+                fireflyEver,
+              );
               const text = this.buildProblemMessage(
                 !gmailOk,
                 !fireflyOk,
@@ -159,7 +181,8 @@ export class FinanceStatusCronService {
           ) {
             const integ = await this.userService.getIntegrationStatus(userId);
             const canRemind =
-              this.daysSince(integ?.lastOnboardingReminderAt) >= notifyCooldownDays;
+              this.daysSince(integ?.lastOnboardingReminderAt) >=
+              notifyCooldownDays;
             if (canRemind) {
               const label = STEP_LABELS[step] ?? step;
               await this.botService.sendMessageToUser(
@@ -169,7 +192,12 @@ export class FinanceStatusCronService {
                   parse_mode: 'Markdown',
                   reply_markup: {
                     inline_keyboard: [
-                      [{ text: '▶️ Continuar configuración', callback_data: 'finance:wizard' }],
+                      [
+                        {
+                          text: '▶️ Continuar configuración',
+                          callback_data: 'finance:wizard',
+                        },
+                      ],
                     ],
                   },
                 },
@@ -268,7 +296,12 @@ export class FinanceStatusCronService {
         },
       ]);
     }
-    rows.push([{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }]);
+    rows.push([
+      {
+        text: '📋 Revisar configuración',
+        callback_data: 'finance:review_setup',
+      },
+    ]);
     return rows;
   }
 
