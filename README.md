@@ -49,9 +49,8 @@ Bot de Telegram personal desarrollado con **NestJS** que integra múltiples serv
 - 🔔 Notificaciones programadas
 
 ### 🔧 **Módulo DevOps**
-- 🌐 Actualización automática de DNS
-- 🔌 Ejecución remota de scripts vía SSH
-- 🐳 Gestión de contenedores Docker
+- 🌐 Gestión de DNS vía API REST (Cloudflare DNS Manager, Bearer token)
+- 🔌 Test de conexión a la API DNS
 
 <h2 id="tech-stack">🛠️ Stack Tecnológico</h2>
 
@@ -62,7 +61,6 @@ Bot de Telegram personal desarrollado con **NestJS** que integra múltiples serv
 | **Prisma ORM** | Gestión de base de datos type-safe |
 | **PostgreSQL** | Base de datos relacional |
 | **node-telegram-bot-api** | Integración con Telegram |
-| **SSH2** | Conexiones SSH para operaciones remotas |
 | **Cheerio** | Web scraping para obtener información de Pico y Placa |
 | **Docker** | Containerización y despliegue |
 
@@ -99,11 +97,10 @@ DATABASE_URL="postgresql://botuser:botpassword@localhost:5432/bot_tg_db"
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=tu_token_de_telegram
 
-# SSH Configuration (opcional)
-SSH_HOST=tu_host
-SSH_PORT=22
-SSH_USERNAME=tu_usuario
-SSH_PASSWORD=tu_password
+# DNS API Configuration (opcional)
+DNS_API_BASE_URL=https://tu-dns-api.example.com
+CF_DNS_API_TOKEN=tu_token_de_cloudflare
+DNS_ZONE=tu_dominio.com
 ```
 
 ### Paso 4: Inicializar Prisma
@@ -175,7 +172,7 @@ yarn test:cov
 | Comando | Descripción |
 |---------|-------------|
 | `/dnsupdate` | Actualiza el DNS remotamente |
-| `/testconnection` | Verifica la conexión SSH |
+| `/testconnection` | Verifica la API DNS |
 
 <h2 id="docker">🐳 Docker</h2>
 

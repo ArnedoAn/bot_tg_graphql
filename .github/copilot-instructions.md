@@ -87,16 +87,16 @@ Required in `.env`:
 - `TELEGRAM_TOKEN` - Bot token from BotFather
 - `DATABASE_URL` - PostgreSQL connection string
 - `ADMIN_ID` - Admin chat ID for system notifications
-- `SSH_HOST`, `SSH_PORT`, `SSH_USERNAME` - SSH connection details
-- `SSH_PRIVATE_KEY_PATH` - Path to SSH private key file (preferred)
-- `SSH_PASSWORD` - SSH password (fallback if no key path)
+- `DNS_API_BASE_URL` - DNS API base URL
+- `CF_DNS_API_TOKEN` - Cloudflare DNS API bearer token
+- `DNS_ZONE` - DNS zone managed by the API
 - `FINANCE_API_URL` - Finance Analyzer API base URL (default: https://financeapi.toothless.codes)
 
 ## External Integrations
 
 - **Transcaribe API**: HTTP calls to `recaudo.sondapay.com` for transit card balance
 - **Pico y Placa**: Web scraping from `pyphoy.com/cartagena/particulares` using Cheerio
-- **DevOps SSH**: Remote command execution via `node-ssh` library to Docker host
+- **DevOps DNS**: REST calls to Cloudflare DNS API (Bearer token, HttpService from @nestjs/axios)
 - **Finance Analyzer API**: REST API for transaction processing (see [finance.service.ts](src/finance/finance.service.ts))
   - Batch processing: `POST /api/v1/processing/batch`
   - Auth status: `GET /api/v1/auth/status`
@@ -107,3 +107,19 @@ Required in `.env`:
 ## Testing Conventions
 
 Tests use `@nestjs/testing` with real module imports. See [transcaribe.service.spec.ts](src/transcaribe/transcaribe.service.spec.ts) for pattern. Mock external services, not internal modules.
+
+Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+Rules:
+- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
+- Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
+- Pattern: [thing] [action] [reason]. [next step].
+- Not: "Sure! I'd be happy to help you with that."
+- Yes: "Bug in auth middleware. Fix:"
+
+Switch level: /caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra
+Stop: "stop caveman" or "normal mode"
+
+Auto-Clarity: drop caveman for security warnings, irreversible actions, user confused. Resume after.
+
+Boundaries: code/commits/PRs written normal.
