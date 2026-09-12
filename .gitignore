@@ -35,6 +35,22 @@ lerna-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# AI coding agent / editor tooling
+.claude/
+.clinerules/
+.opencode/
+.cursor/
+.windsurf/
+.omo/
+.sisyphus/
+.codex/
+.gemini/
+.continue/
+.aider*
+.agents/
+
+# Local-only docs / scripts
 .sisyphus/AGENTS.md
 .sisyphus/src_shared_AGENTS.md
 src/shared/AGENTS.md
