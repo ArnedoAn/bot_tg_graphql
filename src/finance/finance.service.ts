@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { AxiosRequestConfig } from 'axios';
-import { firstValueFrom } from 'rxjs';
+import axios, { AxiosRequestConfig } from 'axios';
 import { Result } from '../shared/interfaces/result.interface';
 
 export interface BatchProcessingRequest {
@@ -70,10 +68,7 @@ export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
   private readonly apiBaseUrl: string;
 
-  constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     this.apiBaseUrl = this.configService.get<string>(
       'FINANCE_API_URL',
       'https://financeapi.toothless.codes',
@@ -96,16 +91,32 @@ export class FinanceService {
     return date.toISOString().split('T')[0];
   }
 
-  private buildUserHeaders(userId: string): AxiosRequestConfig {
-    return {
-      headers: {
-        'X-User-Id': userId,
-      },
-    };
-  }
-
-  private logUserRequest(userId: string, operation: string, url: string): void {
+  /**
+   * Shared request helper: builds the full URL, logs the request with the
+   * user id, performs the axios call and maps errors to the Result shape.
+   */
+  private async request<T>(
+    config: AxiosRequestConfig,
+    userId: string,
+    operation: string,
+    errorLabel: string = operation,
+  ): Promise<Result> {
+    const url = `${this.apiBaseUrl}${config.url}`;
     this.logger.log(`[userId=${userId}] ${operation} -> ${url}`);
+    try {
+      const response = await axios.request<T>({
+        ...config,
+        url,
+        headers: { ...config.headers, 'X-User-Id': userId },
+      });
+      return { success: true, result: response.data };
+    } catch (error) {
+      this.logger.error(`${errorLabel}: ${error.message}`);
+      return {
+        success: false,
+        result: error.response?.data?.detail || error.message,
+      };
+    }
   }
 
   /**
@@ -117,115 +128,70 @@ export class FinanceService {
     maxEmails: number = 200,
     dryRun: boolean = false,
   ): Promise<Result> {
-    try {
-      const requestBody: BatchProcessingRequest = {
-        max_emails: maxEmails,
-        dry_run: dryRun,
-        after_date: afterDate || this.getYesterdayDate(),
-        use_known_senders: true,
-      };
+    const requestBody: BatchProcessingRequest = {
+      max_emails: maxEmails,
+      dry_run: dryRun,
+      after_date: afterDate || this.getYesterdayDate(),
+      use_known_senders: true,
+    };
 
-      this.logger.log(
-        `[userId=${userId}] launchBatchProcessing after_date=${requestBody.after_date} dry_run=${requestBody.dry_run}`,
-      );
-      const url = `${this.apiBaseUrl}/api/v1/processing/batch`;
-      this.logUserRequest(userId, 'launchBatchProcessing', url);
-      const response = await firstValueFrom(
-        this.httpService.post<BatchProcessingJobEnqueueResponse>(
-          url,
-          requestBody,
-          this.buildUserHeaders(userId),
-        ),
-      );
-
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Batch processing failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    this.logger.log(
+      `[userId=${userId}] launchBatchProcessing after_date=${requestBody.after_date} dry_run=${requestBody.dry_run}`,
+    );
+    return this.request<BatchProcessingJobEnqueueResponse>(
+      { method: 'post', url: '/api/v1/processing/batch', data: requestBody },
+      userId,
+      'launchBatchProcessing',
+      'Batch processing failed',
+    );
   }
 
   /**
    * Get async batch processing job status
    */
   async getProcessingJobStatus(userId: string, jobId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/processing/jobs/${jobId}`;
-      this.logUserRequest(userId, 'getProcessingJobStatus', url);
-      const response = await firstValueFrom(
-        this.httpService.get<ProcessingJobStatusResponse>(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Get processing job status failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request<ProcessingJobStatusResponse>(
+      { method: 'get', url: `/api/v1/processing/jobs/${jobId}` },
+      userId,
+      'getProcessingJobStatus',
+      'Get processing job status failed',
+    );
   }
 
   /**
    * Check Gmail authentication status
    */
   async getGmailAuthStatus(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/auth/status`;
-      this.logUserRequest(userId, 'getGmailAuthStatus', url);
-      const response = await firstValueFrom(
-        this.httpService.get<AuthStatus>(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Auth status check failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request<AuthStatus>(
+      { method: 'get', url: '/api/v1/auth/status' },
+      userId,
+      'getGmailAuthStatus',
+      'Auth status check failed',
+    );
   }
 
   /**
    * Get Gmail OAuth authorization URL for re-authentication
    */
   async getGmailAuthUrl(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/auth/url`;
-      this.logUserRequest(userId, 'getGmailAuthUrl', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Get auth URL failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/auth/url' },
+      userId,
+      'getGmailAuthUrl',
+      'Get auth URL failed',
+    );
   }
 
   /**
    * Check Firefly III connection status
    */
   async getFireflyStatus(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/auth/firefly/status`;
-      this.logUserRequest(userId, 'getFireflyStatus', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Firefly status check failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/auth/firefly/status' },
+      userId,
+      'getFireflyStatus',
+      'Firefly status check failed',
+    );
   }
 
   /**
@@ -234,206 +200,136 @@ export class FinanceService {
    * Cifrado en reposo y aislamiento por usuario deben aplicarse en el Finance API.
    */
   async setFireflyToken(userId: string, token: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/auth/firefly/token`;
-      this.logUserRequest(userId, 'setFireflyToken', url);
-      const body: FireflyTokenRequest = { token };
-
-      const response = await firstValueFrom(
-        this.httpService.put(url, body, this.buildUserHeaders(userId)),
-      );
-
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Set Firefly token failed for userId=${userId}: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    const body: FireflyTokenRequest = { token };
+    return this.request(
+      {
+        method: 'put',
+        url: '/api/v1/auth/firefly/token',
+        data: body,
+      },
+      userId,
+      'setFireflyToken',
+      `Set Firefly token failed for userId=${userId}`,
+    );
   }
 
   /**
    * Check DeepSeek AI connection status
    */
   async getDeepSeekStatus(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/auth/deepseek/status`;
-      this.logUserRequest(userId, 'getDeepSeekStatus', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`DeepSeek status check failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/auth/deepseek/status' },
+      userId,
+      'getDeepSeekStatus',
+      'DeepSeek status check failed',
+    );
   }
 
   /**
    * Get full health check
    */
   async getHealthCheck(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/health`;
-      this.logUserRequest(userId, 'getHealthCheck', url);
-      const response = await firstValueFrom(
-        this.httpService.get<HealthCheck>(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Health check failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request<HealthCheck>(
+      { method: 'get', url: '/api/v1/health' },
+      userId,
+      'getHealthCheck',
+      'Health check failed',
+    );
   }
 
   /**
    * Get processing statistics
    */
   async getStatistics(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/processing/statistics`;
-      this.logUserRequest(userId, 'getStatistics', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Statistics fetch failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/processing/statistics' },
+      userId,
+      'getStatistics',
+      'Statistics fetch failed',
+    );
   }
 
   /**
    * Get audit logs
    */
-  async getAuditLogs(userId: string, limit: number = 10, status?: string): Promise<Result> {
-    try {
-      let url = `${this.apiBaseUrl}/api/v1/processing/audit?limit=${limit}`;
-      if (status) {
-        url += `&status=${status}`;
-      }
-      this.logUserRequest(userId, 'getAuditLogs', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Audit logs fetch failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
+  async getAuditLogs(
+    userId: string,
+    limit: number = 10,
+    status?: string,
+  ): Promise<Result> {
+    let path = `/api/v1/processing/audit?limit=${limit}`;
+    if (status) {
+      path += `&status=${status}`;
     }
+    return this.request(
+      { method: 'get', url: path },
+      userId,
+      'getAuditLogs',
+      'Audit logs fetch failed',
+    );
   }
 
   /**
    * Retry failed emails
    */
   async retryFailed(userId: string, limit: number = 50): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/processing/retry-failed?limit=${limit}`;
-      this.logUserRequest(userId, 'retryFailed', url);
-      const response = await firstValueFrom(
-        this.httpService.post(url, undefined, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Retry failed emails failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      {
+        method: 'post',
+        url: `/api/v1/processing/retry-failed?limit=${limit}`,
+      },
+      userId,
+      'retryFailed',
+      'Retry failed emails failed',
+    );
   }
 
   /**
    * Get scheduler status
    */
   async getSchedulerStatus(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/scheduler/status`;
-      this.logUserRequest(userId, 'getSchedulerStatus', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Scheduler status fetch failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/scheduler/status' },
+      userId,
+      'getSchedulerStatus',
+      'Scheduler status fetch failed',
+    );
   }
 
   /**
    * Trigger scheduler job manually
    */
   async triggerSchedulerJob(userId: string, jobId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/scheduler/jobs/${jobId}/trigger`;
-      this.logUserRequest(userId, 'triggerSchedulerJob', url);
-      const response = await firstValueFrom(
-        this.httpService.post(url, undefined, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Trigger job failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'post', url: `/api/v1/scheduler/jobs/${jobId}/trigger` },
+      userId,
+      'triggerSchedulerJob',
+      'Trigger job failed',
+    );
   }
 
   /**
    * Sync all data from Firefly III
    */
   async syncAll(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/sync/all`;
-      this.logUserRequest(userId, 'syncAll', url);
-      const response = await firstValueFrom(
-        this.httpService.post(url, undefined, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Sync all failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'post', url: '/api/v1/sync/all' },
+      userId,
+      'syncAll',
+      'Sync all failed',
+    );
   }
 
   /**
    * Get known senders list
    */
   async getKnownSenders(userId: string): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/senders/`;
-      this.logUserRequest(userId, 'getKnownSenders', url);
-      const response = await firstValueFrom(
-        this.httpService.get(url, this.buildUserHeaders(userId)),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Get senders failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      { method: 'get', url: '/api/v1/senders/' },
+      userId,
+      'getKnownSenders',
+      'Get senders failed',
+    );
   }
 
   /**
@@ -444,23 +340,15 @@ export class FinanceService {
     emailCount: number = 100,
     daysBack: number = 30,
   ): Promise<Result> {
-    try {
-      const url = `${this.apiBaseUrl}/api/v1/senders/learn`;
-      this.logUserRequest(userId, 'learnSenders', url);
-      const response = await firstValueFrom(
-        this.httpService.post(
-          url,
-          { email_count: emailCount, days_back: daysBack },
-          this.buildUserHeaders(userId),
-        ),
-      );
-      return { success: true, result: response.data };
-    } catch (error) {
-      this.logger.error(`Learn senders failed: ${error.message}`);
-      return {
-        success: false,
-        result: error.response?.data?.detail || error.message,
-      };
-    }
+    return this.request(
+      {
+        method: 'post',
+        url: '/api/v1/senders/learn',
+        data: { email_count: emailCount, days_back: daysBack },
+      },
+      userId,
+      'learnSenders',
+      'Learn senders failed',
+    );
   }
 }

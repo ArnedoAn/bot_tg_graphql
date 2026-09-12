@@ -24,6 +24,7 @@ import {
   isValidEmail as isValidEmailHelper,
   editOrSend as editOrSendHelper,
   buildSimpleOperationsMenu as buildSimpleOperationsMenuHelper,
+  financeBackKeyboard,
 } from './finance.helpers';
 
 @Injectable()
@@ -59,7 +60,12 @@ export class FinanceWizardHandler {
       );
       return;
     }
-    if (!(await sectionOnHelper(this.featureFlags, FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL))) {
+    if (
+      !(await sectionOnHelper(
+        this.featureFlags,
+        FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL,
+      ))
+    ) {
       await this.botInstance.sendMessageToUser(
         chatId,
         'El tutorial no está disponible. Usa el menú *Finanzas*.',
@@ -98,7 +104,8 @@ export class FinanceWizardHandler {
 
     const gmailOk =
       gmailR.success &&
-      !!(gmailR.result as { gmail_authenticated?: boolean })?.gmail_authenticated;
+      !!(gmailR.result as { gmail_authenticated?: boolean })
+        ?.gmail_authenticated;
     const fireflyOk =
       fireflyR.success &&
       !!(fireflyR.result as { connected?: boolean })?.connected;
@@ -114,7 +121,12 @@ export class FinanceWizardHandler {
     ];
 
     const keyboard = [
-      [{ text: '🔄 Verificar de nuevo', callback_data: 'finance:review_setup' }],
+      [
+        {
+          text: '🔄 Verificar de nuevo',
+          callback_data: 'finance:review_setup',
+        },
+      ],
       [{ text: '🎓 Volver al tutorial', callback_data: 'finance:wizard' }],
       [{ text: '🔙 Volver al menú Finanzas', callback_data: 'menu:finance' }],
     ];
@@ -134,7 +146,7 @@ export class FinanceWizardHandler {
   ): Promise<void> {
     const uid = getUserIdHelper(chatId);
     const prog = await this.onboarding.getOrCreate(uid);
-    let step = (prog.currentStep as FinanceWizardStep) || 'start';
+    const step = (prog.currentStep as FinanceWizardStep) || 'start';
     const idx = FINANCE_WIZARD_STEPS.indexOf(step);
 
     switch (action) {
@@ -182,7 +194,8 @@ export class FinanceWizardHandler {
         const r = await this.financeService.getGmailAuthStatus(uid);
         const ok =
           r.success &&
-          !!(r.result as { gmail_authenticated?: boolean })?.gmail_authenticated;
+          !!(r.result as { gmail_authenticated?: boolean })
+            ?.gmail_authenticated;
         if (ok) {
           await this.onboarding.markGmailDone(uid);
           await this.renderWizardStep(chatId, messageId, 'web_ui');
@@ -211,9 +224,7 @@ export class FinanceWizardHandler {
               callback_data: 'finance:wiz_verify_gmail',
             },
           ]);
-          kb.push(
-            ...wizardNavKeyboardHelper('gmail', { showNext: false }),
-          );
+          kb.push(...wizardNavKeyboardHelper('gmail', { showNext: false }));
           await editOrSendHelper(this.bot, chatId, messageId, text, kb);
         }
         break;
@@ -228,7 +239,7 @@ export class FinanceWizardHandler {
         ) {
           await this.renderWizardStep(chatId, messageId, 'apk');
         } else {
-          await this.onboarding.skipApkToComplete(uid);
+          await this.onboarding.markComplete(uid);
           await this.renderWizardStep(chatId, messageId, 'complete');
         }
         break;
@@ -240,7 +251,7 @@ export class FinanceWizardHandler {
         break;
       }
       case 'wiz_apk_skip':
-        await this.onboarding.skipApkToComplete(uid);
+        await this.onboarding.markComplete(uid);
         await this.renderWizardStep(chatId, messageId, 'complete');
         break;
       case 'wiz_apk_done':
@@ -391,7 +402,10 @@ export class FinanceWizardHandler {
    */
   async deliverFinanceApk(
     chatId: number,
-    opts?: { messageId?: number; missingApkKeyboard?: InlineKeyboardButton[][] },
+    opts?: {
+      messageId?: number;
+      missingApkKeyboard?: InlineKeyboardButton[][];
+    },
   ): Promise<void> {
     if (
       !(await sectionOnHelper(
@@ -500,7 +514,12 @@ export class FinanceWizardHandler {
           '\n\n' +
           '_En el siguiente paso pegarás el PAT en el bot. Si aún no lo creas, puedes hacerlo en Perfil → OAuth / tokens (según tu pantalla de Firefly)._';
         keyboard = [
-          [{ text: '🏠 Abrir Firefly (inicio)', url: onboardingUrls.fireflyHome }],
+          [
+            {
+              text: '🏠 Abrir Firefly (inicio)',
+              url: onboardingUrls.fireflyHome,
+            },
+          ],
           [
             {
               text: '👤 Perfil (cuenta y token)',
@@ -610,9 +629,7 @@ export class FinanceWizardHandler {
             callback_data: 'finance:wiz_verify_gmail',
           },
         ]);
-        kb.push(
-          ...wizardNavKeyboardHelper('gmail', { showNext: false }),
-        );
+        kb.push(...wizardNavKeyboardHelper('gmail', { showNext: false }));
         keyboard = kb;
         break;
       }
@@ -794,11 +811,7 @@ export class FinanceWizardHandler {
         '❌ No escribiste nada. Vuelve a *Finanzas* e inténtalo de nuevo.',
         {
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-            ],
-          },
+          reply_markup: { inline_keyboard: financeBackKeyboard },
         },
       );
       return;
@@ -824,11 +837,7 @@ export class FinanceWizardHandler {
           : '✅ *Listo.* Tu token de Firefly quedó guardado para este bot.',
         {
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-            ],
-          },
+          reply_markup: { inline_keyboard: financeBackKeyboard },
         },
       );
       return;
@@ -842,11 +851,7 @@ export class FinanceWizardHandler {
         : `❌ No se pudo guardar el token.\n\n_Detalle: ${result.result}_`,
       {
         parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-          ],
-        },
+      reply_markup: { inline_keyboard: financeBackKeyboard },
       },
     );
   }

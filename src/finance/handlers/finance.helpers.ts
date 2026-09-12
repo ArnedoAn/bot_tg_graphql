@@ -14,6 +14,10 @@ export const onboardingUrls = {
   financeSetup: 'https://finance.toothless.codes/settings/setup',
 } as const;
 
+export const financeBackKeyboard: InlineKeyboardButton[][] = [
+  [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+];
+
 /** Título de sección según perfil */
 export function financeTitle(advanced: boolean): string {
   return advanced ? '💰 *Finance Analyzer*' : '💰 *Finanzas*';
@@ -36,9 +40,8 @@ export async function sectionOn(
 
 export function isGoogleTestingMode(configService: ConfigService): boolean {
   return (
-    configService
-      .get<string>('GOOGLE_TESTING_MODE', 'false')
-      .toLowerCase() === 'true'
+    configService.get<string>('GOOGLE_TESTING_MODE', 'false').toLowerCase() ===
+    'true'
   );
 }
 
@@ -67,7 +70,9 @@ export function buildProgressBar(
     return '⚪';
   });
   const label =
-    step === 'complete' ? items.length : Math.min(activeIndex + 1, items.length);
+    step === 'complete'
+      ? items.length
+      : Math.min(activeIndex + 1, items.length);
   return `${icons.join(' ')}  _(${label}/${items.length})_\n\n`;
 }
 
@@ -124,6 +129,24 @@ export async function editOrSend(
 }
 
 /**
+ * Edita el mensaje a un texto de carga (no-op si no hay messageId).
+ */
+export async function editLoading(
+  bot: TelegramBot,
+  chatId: number,
+  messageId: number | undefined,
+  text: string,
+): Promise<void> {
+  if (messageId) {
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+    });
+  }
+}
+
+/**
  * Menú usuario común: tutorial primero, operaciones aparte.
  */
 export async function buildSimpleMenuOptions(
@@ -132,14 +155,25 @@ export async function buildSimpleMenuOptions(
   const rows: InlineKeyboardButton[][] = [];
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_TUTORIAL)) {
     rows.push([
-      { text: '🎓 Configurar finanzas (tutorial)', callback_data: 'finance:wizard' },
+      {
+        text: '🎓 Configurar finanzas (tutorial)',
+        callback_data: 'finance:wizard',
+      },
     ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_REVIEW)) {
-    rows.push([{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }]);
+    rows.push([
+      {
+        text: '📋 Revisar configuración',
+        callback_data: 'finance:review_setup',
+      },
+    ]);
   }
   rows.push([
-    { text: '⚙️ Operaciones (correo, Gmail, token…)', callback_data: 'finance:ops_menu' },
+    {
+      text: '⚙️ Operaciones (correo, Gmail, token…)',
+      callback_data: 'finance:ops_menu',
+    },
   ]);
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_APK)) {
     rows.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);
@@ -161,12 +195,20 @@ export async function buildAdvancedMenuOptions(
     ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_REVIEW)) {
-    rows.push([{ text: '📋 Revisar configuración', callback_data: 'finance:review_setup' }]);
+    rows.push([
+      {
+        text: '📋 Revisar configuración',
+        callback_data: 'finance:review_setup',
+      },
+    ]);
   }
 
   const batchRow: InlineKeyboardButton[] = [];
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_BATCH)) {
-    batchRow.push({ text: '🚀 Procesar Transacciones', callback_data: 'finance:batch' });
+    batchRow.push({
+      text: '🚀 Procesar Transacciones',
+      callback_data: 'finance:batch',
+    });
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_DRYRUN)) {
     batchRow.push({ text: '🔍 Modo Prueba', callback_data: 'finance:dryrun' });
@@ -191,11 +233,20 @@ export async function buildAdvancedMenuOptions(
   }
   if (gmailRow.length) rows.push(gmailRow);
 
-  if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)) {
-    rows.push([{ text: '🔑 Configurar Firefly Token', callback_data: 'finance:firefly_token' }]);
+  if (
+    await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)
+  ) {
+    rows.push([
+      {
+        text: '🔑 Configurar Firefly Token',
+        callback_data: 'finance:firefly_token',
+      },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_USER_ID)) {
-    rows.push([{ text: '🆔 Ver User ID (API)', callback_data: 'finance:show_user_id' }]);
+    rows.push([
+      { text: '🆔 Ver User ID (API)', callback_data: 'finance:show_user_id' },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_HEALTH)) {
     rows.push([{ text: '🏥 Health Check', callback_data: 'finance:health' }]);
@@ -206,21 +257,32 @@ export async function buildAdvancedMenuOptions(
     schedRow.push({ text: '⏰ Scheduler', callback_data: 'finance:scheduler' });
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_RETRY)) {
-    schedRow.push({ text: '🔄 Reintentar Fallidos', callback_data: 'finance:retry' });
+    schedRow.push({
+      text: '🔄 Reintentar Fallidos',
+      callback_data: 'finance:retry',
+    });
   }
   if (schedRow.length) rows.push(schedRow);
 
   const sendersRow: InlineKeyboardButton[] = [];
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_SENDERS)) {
-    sendersRow.push({ text: '📧 Ver Senders', callback_data: 'finance:senders' });
+    sendersRow.push({
+      text: '📧 Ver Senders',
+      callback_data: 'finance:senders',
+    });
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_LEARN)) {
-    sendersRow.push({ text: '🧠 Aprender Senders', callback_data: 'finance:learn' });
+    sendersRow.push({
+      text: '🧠 Aprender Senders',
+      callback_data: 'finance:learn',
+    });
   }
   if (sendersRow.length) rows.push(sendersRow);
 
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_SYNC)) {
-    rows.push([{ text: '🔄 Sincronizar Firefly', callback_data: 'finance:sync' }]);
+    rows.push([
+      { text: '🔄 Sincronizar Firefly', callback_data: 'finance:sync' },
+    ]);
   }
 
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_APK)) {
@@ -238,28 +300,47 @@ export async function buildSimpleOperationsMenu(
   const rows: InlineKeyboardButton[][] = [];
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_BATCH)) {
     rows.push([
-      { text: '📥 Procesar movimientos desde el correo', callback_data: 'finance:batch' },
+      {
+        text: '📥 Procesar movimientos desde el correo',
+        callback_data: 'finance:batch',
+      },
     ]);
   }
   const gmailRow: InlineKeyboardButton[] = [];
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_GMAIL)) {
     gmailRow.push(
       { text: '✉️ ¿Gmail conectado?', callback_data: 'finance:gmail_status' },
-      { text: '🔗 Conectar o renovar Gmail', callback_data: 'finance:gmail_reconnect' },
+      {
+        text: '🔗 Conectar o renovar Gmail',
+        callback_data: 'finance:gmail_reconnect',
+      },
     );
   }
   if (gmailRow.length) rows.push(gmailRow);
-  if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)) {
-    rows.push([{ text: '🔑 Token de Firefly', callback_data: 'finance:firefly_token' }]);
+  if (
+    await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_FIREFLY_TOKEN)
+  ) {
+    rows.push([
+      { text: '🔑 Token de Firefly', callback_data: 'finance:firefly_token' },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_SYNC)) {
-    rows.push([{ text: '🔄 Sincronizar con Firefly', callback_data: 'finance:sync' }]);
+    rows.push([
+      { text: '🔄 Sincronizar con Firefly', callback_data: 'finance:sync' },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_HEALTH)) {
-    rows.push([{ text: '✅ Estado del servicio', callback_data: 'finance:health' }]);
+    rows.push([
+      { text: '✅ Estado del servicio', callback_data: 'finance:health' },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_USER_ID)) {
-    rows.push([{ text: '🆔 Mi código de usuario', callback_data: 'finance:show_user_id' }]);
+    rows.push([
+      {
+        text: '🆔 Mi código de usuario',
+        callback_data: 'finance:show_user_id',
+      },
+    ]);
   }
   if (await sectionOn(featureFlags, FEATURE_FLAGS.FINANCE_SECTION_APK)) {
     rows.push([{ text: '📥 Obtener APK', callback_data: 'finance:get_apk' }]);

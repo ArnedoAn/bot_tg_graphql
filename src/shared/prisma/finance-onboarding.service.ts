@@ -89,17 +89,11 @@ export class FinanceOnboardingService {
     });
   }
 
-  async skipApkToComplete(userId: string): Promise<void> {
-    await this.markComplete(userId);
-  }
-
-  stepIndex(step: string): number {
-    const i = FINANCE_WIZARD_STEPS.indexOf(step as FinanceWizardStep);
-    return i < 0 ? 0 : i;
-  }
-
   stepAt(index: number): FinanceWizardStep {
-    const clamped = Math.max(0, Math.min(FINANCE_WIZARD_STEPS.length - 1, index));
+    const clamped = Math.max(
+      0,
+      Math.min(FINANCE_WIZARD_STEPS.length - 1, index),
+    );
     return FINANCE_WIZARD_STEPS[clamped];
   }
 }

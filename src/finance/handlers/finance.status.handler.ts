@@ -7,6 +7,8 @@ import {
   financeTitle as financeTitleHelper,
   getUserId as getUserIdHelper,
   editOrSend as editOrSendHelper,
+  editLoading as editLoadingHelper,
+  financeBackKeyboard,
 } from './finance.helpers';
 
 @Injectable()
@@ -28,10 +30,7 @@ export class FinanceStatusHandler {
   /**
    * Show user id sent to Finance API (header X-User-Id)
    */
-  async showApiUserId(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showApiUserId(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const userId = getUserIdHelper(chatId);
     const text = adv
@@ -46,29 +45,23 @@ export class FinanceStatusHandler {
         `\`${userId}\`\n\n` +
         `_Es tu identificador en Telegram (solo para este bot)._`;
 
-    const keyboard = [
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-    ];
-    await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
+    await editOrSendHelper(
+      this.bot,
+      chatId,
+      messageId,
+      text,
+      financeBackKeyboard,
+    );
   }
 
   /**
    * Show Gmail authentication status
    */
-  async showGmailStatus(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showGmailStatus(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const loadingText = `${financeTitleHelper(adv)}\n\n⏳ Comprobando Gmail...`;
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getGmailAuthStatus(
       getUserIdHelper(chatId),
@@ -102,29 +95,23 @@ export class FinanceStatusHandler {
         : `${financeTitleHelper(adv)}\n\n❌ No se pudo comprobar Gmail. Intenta más tarde.\n\n_Detalle: ${result.result}_`;
     }
 
-    const keyboard = [
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-    ];
-    await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
+    await editOrSendHelper(
+      this.bot,
+      chatId,
+      messageId,
+      text,
+      financeBackKeyboard,
+    );
   }
 
   /**
    * Show Gmail reconnect with auth URL
    */
-  async showGmailReconnect(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showGmailReconnect(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const loadingText = `${financeTitleHelper(adv)}\n\n⏳ Preparando enlace seguro...`;
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getGmailAuthUrl(
       getUserIdHelper(chatId),
@@ -158,15 +145,13 @@ export class FinanceStatusHandler {
             callback_data: 'finance:gmail_status',
           },
         ],
-        [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+        ...financeBackKeyboard,
       ];
     } else {
       text = adv
         ? `${financeTitleHelper(adv)}\n\n❌ Error: ${result.result}`
         : `${financeTitleHelper(adv)}\n\n❌ No se pudo abrir el enlace. Intenta de nuevo.\n\n_Detalle: ${result.result}_`;
-      keyboard = [
-        [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-      ];
+      keyboard = financeBackKeyboard;
     }
 
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
@@ -175,20 +160,11 @@ export class FinanceStatusHandler {
   /**
    * Show full health check
    */
-  async showHealthCheck(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showHealthCheck(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const loadingText = `${financeTitleHelper(adv)}\n\n⏳ Revisando que todo funcione...`;
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const [healthResult, fireflyResult, deepseekResult] = await Promise.all([
       this.financeService.getHealthCheck(getUserIdHelper(chatId)),
@@ -242,7 +218,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Actualizar', callback_data: 'finance:health' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -250,20 +226,11 @@ export class FinanceStatusHandler {
   /**
    * Show processing statistics
    */
-  async showStatistics(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showStatistics(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Obteniendo estadísticas...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getStatistics(
       getUserIdHelper(chatId),
@@ -285,7 +252,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Actualizar', callback_data: 'finance:stats' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -293,20 +260,11 @@ export class FinanceStatusHandler {
   /**
    * Show audit logs
    */
-  async showAuditLogs(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showAuditLogs(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Obteniendo logs de auditoría...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getAuditLogs(
       getUserIdHelper(chatId),
@@ -340,7 +298,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Actualizar', callback_data: 'finance:audit' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -348,20 +306,11 @@ export class FinanceStatusHandler {
   /**
    * Show scheduler status
    */
-  async showSchedulerStatus(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showSchedulerStatus(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Obteniendo estado del scheduler...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getSchedulerStatus(
       getUserIdHelper(chatId),
@@ -384,7 +333,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Actualizar', callback_data: 'finance:scheduler' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -392,20 +341,11 @@ export class FinanceStatusHandler {
   /**
    * Retry failed emails
    */
-  async retryFailedAction(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async retryFailedAction(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Reintentando emails fallidos...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.retryFailed(
       getUserIdHelper(chatId),
@@ -428,7 +368,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Reintentar de nuevo', callback_data: 'finance:retry' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -436,20 +376,11 @@ export class FinanceStatusHandler {
   /**
    * Show known senders
    */
-  async showKnownSenders(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showKnownSenders(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Obteniendo senders conocidos...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.getKnownSenders(
       getUserIdHelper(chatId),
@@ -479,7 +410,7 @@ export class FinanceStatusHandler {
     const keyboard = [
       [{ text: '🧠 Aprender Nuevos', callback_data: 'finance:learn' }],
       [{ text: '🔄 Actualizar', callback_data: 'finance:senders' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -487,20 +418,11 @@ export class FinanceStatusHandler {
   /**
    * Learn new senders from emails
    */
-  async learnSendersAction(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async learnSendersAction(chatId: number, messageId?: number): Promise<void> {
     const loadingText =
       '💰 *Finance Analyzer*\n\n⏳ Aprendiendo nuevos senders...';
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.learnSenders(
       getUserIdHelper(chatId),
@@ -529,7 +451,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '📧 Ver Senders', callback_data: 'finance:senders' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }
@@ -537,20 +459,11 @@ export class FinanceStatusHandler {
   /**
    * Sync Firefly data
    */
-  async syncFireflyAction(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async syncFireflyAction(chatId: number, messageId?: number): Promise<void> {
     const adv = await this.isAdvanced(chatId);
     const loadingText = `${financeTitleHelper(adv)}\n\n⏳ Sincronizando con Firefly...`;
 
-    if (messageId) {
-      await this.bot.editMessageText(loadingText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-      });
-    }
+    await editLoadingHelper(this.bot, chatId, messageId, loadingText);
 
     const result = await this.financeService.syncAll(getUserIdHelper(chatId));
 
@@ -586,7 +499,7 @@ export class FinanceStatusHandler {
 
     const keyboard = [
       [{ text: '🔄 Sincronizar de nuevo', callback_data: 'finance:sync' }],
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
+      ...financeBackKeyboard,
     ];
     await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
   }

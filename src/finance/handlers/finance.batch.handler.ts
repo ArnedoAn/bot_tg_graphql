@@ -13,6 +13,7 @@ import {
   getUserId as getUserIdHelper,
   sleep as sleepHelper,
   editOrSend as editOrSendHelper,
+  financeBackKeyboard,
 } from './finance.helpers';
 
 @Injectable()
@@ -65,8 +66,18 @@ export class FinanceBatchHandler {
   ): InlineKeyboardButton[][] {
     const keyboard: InlineKeyboardButton[][] = [];
     const months = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+      'Enero',
+      'Febrero',
+      'Marzo',
+      'Abril',
+      'Mayo',
+      'Junio',
+      'Julio',
+      'Agosto',
+      'Septiembre',
+      'Octubre',
+      'Noviembre',
+      'Diciembre',
     ];
 
     // Header with month/year navigation
@@ -279,10 +290,13 @@ export class FinanceBatchHandler {
       const text = adv
         ? `${financeTitleHelper(adv)}\n\n❌ Error al encolar job: ${result.result}`
         : `${financeTitleHelper(adv)}\n\n❌ No se pudo iniciar el proceso. Intenta de nuevo o más tarde.\n\n_Detalle: ${result.result}_`;
-      const keyboard = [
-        [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-      ];
-      await editOrSendHelper(this.bot, chatId, messageId, text, keyboard);
+      await editOrSendHelper(
+        this.bot,
+        chatId,
+        messageId,
+        text,
+        financeBackKeyboard,
+      );
       return;
     }
 
@@ -301,10 +315,13 @@ export class FinanceBatchHandler {
         `✅ Tu proceso ya está en cola. Te avisaré aquí cuando termine.\n\n` +
         `_Si tarda mucho, no cierres Telegram._`;
 
-    const keyboard = [
-      [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-    ];
-    await editOrSendHelper(this.bot, chatId, messageId, queuedText, keyboard);
+    await editOrSendHelper(
+      this.bot,
+      chatId,
+      messageId,
+      queuedText,
+      financeBackKeyboard,
+    );
 
     void this.pollBatchJobAndNotify(chatId, jobId, mode);
   }
@@ -346,11 +363,7 @@ export class FinanceBatchHandler {
           : `${financeTitleHelper(adv)}\n\n❌ *No se pudo completar el proceso*\n\n${job.error_message || 'Error desconocido. Intenta de nuevo o revisa Gmail y Firefly.'}`;
         await this.bot.sendMessage(chatId, failText, {
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-            ],
-          },
+          reply_markup: { inline_keyboard: financeBackKeyboard },
         });
         return;
       }
@@ -378,11 +391,7 @@ export class FinanceBatchHandler {
 
         await this.bot.sendMessage(chatId, text, {
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-            ],
-          },
+          reply_markup: { inline_keyboard: financeBackKeyboard },
         });
         return;
       }
@@ -393,11 +402,7 @@ export class FinanceBatchHandler {
       : `${financeTitleHelper(adv)}\n\n⏰ El proceso sigue tardando o no hubo respuesta a tiempo. Prueba otra vez desde *Finanzas* más tarde.`;
     await this.bot.sendMessage(chatId, timeoutText, {
       parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔙 Volver al Menú', callback_data: 'menu:finance' }],
-        ],
-      },
+      reply_markup: { inline_keyboard: financeBackKeyboard },
     });
   }
 
@@ -419,7 +424,7 @@ export class FinanceBatchHandler {
       await this.handleDateSelection(chatId, action, messageId);
       return true;
     }
-    if (action === 'batch' || action === 'batch_process') {
+    if (action === 'batch') {
       await this.initDateSelector(chatId, messageId, false);
       return true;
     }

@@ -86,17 +86,11 @@ export class FinanceHandler {
   }
 
   /** Entrada pública: comando /configurar_finanzas */
-  async openFinanceWizard(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async openFinanceWizard(chatId: number, messageId?: number): Promise<void> {
     return this.wizardHandler.openFinanceWizard(chatId, messageId);
   }
 
-  async showConfigReview(
-    chatId: number,
-    messageId?: number,
-  ): Promise<void> {
+  async showConfigReview(chatId: number, messageId?: number): Promise<void> {
     return this.wizardHandler.showConfigReview(chatId, messageId);
   }
 
@@ -145,11 +139,7 @@ export class FinanceHandler {
     }
 
     // Batch domain actions
-    if (
-      action === 'batch' ||
-      action === 'batch_process' ||
-      action === 'dryrun'
-    ) {
+    if (action === 'batch' || action === 'dryrun') {
       return this.batchHandler.handleCallback(chatId, action, messageId);
     }
 
