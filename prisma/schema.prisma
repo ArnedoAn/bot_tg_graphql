@@ -23,14 +23,6 @@ model Vehicle {
   userId    String 
 }
 
-model Reminder {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String
-  date        DateTime
-  userId      String
-}
-
 /// Preferencias por usuario de Telegram (chatId como string)
 model UserSettings {
   userId   String @id @map("user_id")

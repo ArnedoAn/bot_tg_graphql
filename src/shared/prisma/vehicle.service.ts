@@ -23,17 +23,6 @@ export class VehicleService {
     }
   }
 
-  async getAllVehicles(): Promise<Result> {
-    try {
-      const result = await this.prisma.vehicle.findMany();
-      if (!result) throw new Error('No hay vehiculos registrados');
-      return { success: true, result };
-    } catch (err) {
-      console.error(err);
-      return { success: false, result: err.message || 'Error en Prisma (Dev)' };
-    }
-  }
-
   async getVehicleWhere(data: any): Promise<Result> {
     try {
       const result = await this.prisma.vehicle.findUnique({
@@ -58,38 +47,8 @@ export class VehicleService {
     }
   }
 
-  async updateVehicle(id: number, data: any): Promise<Result> {
-    try {
-      const result = await this.prisma.vehicle.update({
-        where: {
-          id,
-        },
-        data,
-      });
-      if (!result) throw new Error('Vehiculo no encontrado');
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, result: err.message || 'Error en Prisma (Dev)' };
-    }
-  }
-
-  async deleteVehicle(id: number): Promise<Result> {
-    try {
-      const result = await this.prisma.vehicle.delete({
-        where: {
-          id,
-        },
-      });
-      if (!result) throw new Error('Vehiculo no encontrado');
-      return { success: true, result };
-    } catch (err) {
-      return { success: false, result: 'Error en Prisma (Dev)' };
-    }
-  }
-
   async getVehiclesToNotify(todayDigit: number): Promise<Result> {
     try {
-
       const result = await this.prisma
         .$queryRaw`SELECT * FROM filtrar_autos_por_digitos(CAST(${todayDigit} AS integer))`;
 
