@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
+import axios from 'axios';
 import { VehicleService } from '../shared/prisma/vehicle.service';
 
 import * as cheerio from 'cheerio';
@@ -7,10 +7,7 @@ import { Vehicle } from '@prisma/client';
 
 @Injectable()
 export class PicoyplacaService {
-  constructor(
-    private readonly httpService: HttpService,
-    private readonly vehicleService: VehicleService,
-  ) {}
+  constructor(private readonly vehicleService: VehicleService) {}
 
   async getPicoyplacaInfo(): Promise<string> {
     try {
@@ -29,7 +26,7 @@ export class PicoyplacaService {
   private async getScrapedPicoyplacaInfo(): Promise<number[]> {
     try {
       const url: string = 'https://www.pyphoy.com/cartagena/particulares';
-      const response = await this.httpService.get(url).toPromise();
+      const response = await axios.get(url);
       const $ = cheerio.load(response.data);
       const numbersText = $(
         '.sc-4e15c505-0.juuwzm.sc-9e56e907-2.jGMtpa',

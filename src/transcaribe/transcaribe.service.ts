@@ -2,17 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { TarjetaService } from '../shared/prisma/tarjeta.service';
 import { CONSTANTS as Const } from './helpers/operations.helper';
 import { Result } from '../shared/interfaces/result.interface';
-import { HttpService } from '@nestjs/axios';
+import axios from 'axios';
 import { CardData, Transaction } from './interfaces/api.interfaces';
 import { ApiRequest } from './interfaces/apiCall.interface';
 
 @Injectable()
 export class TranscaribeService {
   private readonly TARIFA: number;
-  constructor(
-    private readonly tarjetaService: TarjetaService,
-    private readonly httpService: HttpService,
-  ) {
+  constructor(private readonly tarjetaService: TarjetaService) {
     this.TARIFA = Const.tarifa;
   }
 
@@ -119,7 +116,7 @@ export class TranscaribeService {
         'http://recaudo.sondapay.com/recaudowsrest/producto/consultaTrx';
       const data = result;
       data.numeroDias = 10;
-      const apiResponse = await this.httpService.post(url, data).toPromise();
+      const apiResponse = await axios.post(url, data);
       return apiResponse.data;
     } catch (e) {
       console.error(e);
